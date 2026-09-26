@@ -6,16 +6,19 @@
 
 - **多知识库**：按业务场景拆分（合同 / 财务 / 产品手册 / 售后话术 / 政策…），各库独立上传文档、独立检索问答。
 - **语义检索**：云端 Embedding 向量检索（非关键词匹配），上传时批量编码入库，查询只编码 query。
-- **多用户登录**：bcrypt + JWT，首个注册用户自动成为管理员；管理员可管理知识库、文档、用户。
+- **企业多租户**：用户、知识库、文档和会话按租户隔离；知识库可设为企业共享或指定成员访问。
+- **团队权限**：管理员、编辑、只读三种企业角色；管理员可以为每个知识库再指定编辑/只读成员。
+- **产品工作台**：仪表盘、知识库向导、智能问答、文档管理、数据分析、团队管理和设置均接入后端数据。
+- **多用户登录**：bcrypt + JWT，首个注册用户自动成为管理员；团队邀请生成初始密码，当前版本尚未接入邮件投递。
 - **流式问答**：SSE 流式输出，回答附带来源文档与相关度分数。
-- **数据私有**：全部数据落本地 SQLite 单文件 + 本地文件系统，无第三方数据依赖。
+- **数据隔离**：业务记录始终按 `tenant_id` 查询；MySQL 可用于远程部署，上传文件保存在应用服务器的租户独立目录。
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
 | 后端 | Python 3.11 · FastAPI · MySQL / SQLite · numpy · DeepSeek（问答）· 云端 Embedding（检索） |
-| 前端 | React 18 · TypeScript · Vite · react-router · react-markdown |
+| 前端 | React 18 · TypeScript · Vite · Tailwind CSS 4 · react-router · react-markdown |
 
 ## 目录结构
 
@@ -27,7 +30,7 @@ RAG/
 │   ├── requirements.txt
 │   └── data/         # SQLite、上传文件和 JWT 密钥
 ├── frontend/         # React + TypeScript 前端（Vite）
-│   └── ui-reference/ # 独立的 UI 设计参考
+│   ├── src/workspace-pages/ # 产品工作台页面
 ├── .env              # 本地服务配置
 └── README.md
 ```
@@ -40,7 +43,7 @@ RAG/
 pip install -r backend/requirements.txt
 ```
 
-> 若缺少系统 Node，前端构建需要先装 Node：`brew install node`
+前端构建要求 Node.js 20.19 或更新版本；服务器建议使用 Node.js 20 LTS。
 
 ### 2. 配置 `.env`
 
@@ -111,9 +114,10 @@ npm run build          # 构建到 frontend/dist，由后端静态托管
 | 角色 | 权限 |
 |---|---|
 | 管理员 admin | 管理知识库、文档、用户；删除任意会话 |
-| 成员 user | 在知识库内问答、上传文档、管理自己的会话 |
+| 编辑 operator | 访问企业共享或已授权知识库、上传文档、管理自己的会话 |
+| 只读 user | 访问企业共享或已授权知识库并问答，不能上传文档 |
 
-知识库为组织共享，会话按用户隔离。
+知识库默认企业内共享。管理员可在知识库详情中切换为指定成员访问，并分别授予编辑或只读权限。会话按用户隔离。
 
 ## 常见问题
 

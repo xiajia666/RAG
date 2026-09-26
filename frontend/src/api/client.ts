@@ -61,6 +61,8 @@ export const api = {
     request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 }
 
@@ -86,6 +88,21 @@ export async function uploadDocument(
     throw new ApiError(res.status, detail)
   }
   return res.json()
+}
+
+export async function downloadDocument(docId: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = {}
+  const token = getToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`/api/documents/${docId}/file`, { headers })
+  if (res.status === 401) expireSession()
+  if (!res.ok) throw new ApiError(res.status, '下载文件失败')
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export interface StreamCallbacks {

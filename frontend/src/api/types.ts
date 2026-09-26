@@ -18,6 +18,7 @@ export interface KnowledgeBase {
   created_by: string
   created_at: string
   document_count?: number
+  access_role?: 'admin' | 'editor' | 'reader'
 }
 
 export interface Document {
