@@ -76,7 +76,7 @@ export default function Login() {
         <section className="login-story" aria-label="产品介绍">
           <a className="login-brand" href="#/login" aria-label="个人知识库首页">
             <BrandMark />
-            <span>知微<span className="login-brand-light">·知识库</span></span>
+            <span>知微个人知识库<span className="login-brand-light">·知识库</span></span>
           </a>
 
           <div className="login-story-copy">
