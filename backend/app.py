@@ -4,10 +4,10 @@ import os
 import re
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import auth
@@ -24,6 +24,9 @@ from schemas import (
     SessionCreate,
     UserCreate,
     UserUpdate,
+    TenantUpdate,
+    SettingsUpdate,
+    BulkDocumentDelete,
 )
 
 app = FastAPI(title="小微企业 RAG")
@@ -188,6 +191,58 @@ def me(user=Depends(auth.get_current_user)):
     return public_user(user["id"], user["tenant_id"])
 
 
+@app.get("/api/tenant")
+def get_tenant(user=Depends(auth.get_current_user)):
+    tenant = db.query_one(
+        "SELECT id, tenant_code, name, created_at FROM tenants WHERE id = ? AND status = 1",
+        (user["tenant_id"],),
+    )
+    if not tenant:
+        raise HTTPException(404, "企业不存在")
+    return tenant
+
+
+@app.patch("/api/tenant")
+def update_tenant(req: TenantUpdate, user=Depends(auth.require_admin)):
+    name = req.name.strip()
+    if not name or len(name) > 128:
+        raise HTTPException(400, "企业名称不能为空且不能超过 128 个字符")
+    db.execute(
+        "UPDATE tenants SET name = ?, updated_at = ? WHERE id = ?",
+        (name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user["tenant_id"]),
+    )
+    return get_tenant(user)
+
+
+@app.get("/api/settings")
+def get_settings(user=Depends(auth.get_current_user)):
+    rows = db.query(
+        "SELECT setting_key, setting_value FROM tenant_settings WHERE tenant_id = ?",
+        (user["tenant_id"],),
+    )
+    result = {}
+    for row in rows:
+        try:
+            result[row["setting_key"]] = json.loads(row["setting_value"])
+        except (TypeError, ValueError):
+            result[row["setting_key"]] = row["setting_value"]
+    return result
+
+
+@app.patch("/api/settings")
+def update_settings(req: SettingsUpdate, user=Depends(auth.require_admin)):
+    allowed = {"language", "email_notifications", "embedding_model", "chat_model", "top_k", "security"}
+    if set(req.settings) - allowed:
+        raise HTTPException(400, "设置项包含不支持的字段")
+    for key, value in req.settings.items():
+        if key == "top_k" and (not isinstance(value, int) or not 1 <= value <= 10):
+            raise HTTPException(400, "最大召回片段数必须在 1 到 10 之间")
+        db.set_tenant_setting(
+            user["tenant_id"], key, json.dumps(value, ensure_ascii=False)
+        )
+    return get_settings(user)
+
+
 # ---------- 知识库 ----------
 
 @app.get("/api/kbs")
@@ -198,6 +253,111 @@ def list_kbs(user=Depends(auth.get_current_user)):
         "FROM knowledge_bases k WHERE k.tenant_id = ? ORDER BY k.created_at DESC",
         (user["tenant_id"],),
     )
+
+
+def _tenant_activity(tenant_id, limit=8):
+    docs = db.query(
+        "SELECT d.filename AS target, d.created_at FROM documents d "
+        "WHERE d.tenant_id = ? ORDER BY d.created_at DESC LIMIT ?",
+        (tenant_id, limit),
+    )
+    kbs = db.query(
+        "SELECT name AS target, created_at FROM knowledge_bases WHERE tenant_id = ? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (tenant_id, limit),
+    )
+    events = [
+        {"type": "upload", "target": row["target"], "actor": "成员", "created_at": row["created_at"]}
+        for row in docs
+    ] + [
+        {"type": "create", "target": row["target"], "actor": "成员", "created_at": row["created_at"]}
+        for row in kbs
+    ]
+    return sorted(events, key=lambda event: str(event["created_at"]), reverse=True)[:limit]
+
+
+def _tenant_usage(tenant_id):
+    kb_rows = db.query(
+        "SELECT k.id, k.name, COUNT(DISTINCT d.id) AS document_count, "
+        "COUNT(DISTINCT CASE WHEN m.role = 'user' THEN m.id END) AS query_count "
+        "FROM knowledge_bases k LEFT JOIN documents d ON d.tenant_id = k.tenant_id AND d.kb_id = k.id "
+        "LEFT JOIN sessions s ON s.tenant_id = k.tenant_id AND s.kb_id = k.id "
+        "LEFT JOIN messages m ON m.tenant_id = s.tenant_id AND m.session_id = s.id "
+        "WHERE k.tenant_id = ? GROUP BY k.id, k.name ORDER BY query_count DESC, k.name",
+        (tenant_id,),
+    )
+    return kb_rows
+
+
+@app.get("/api/dashboard")
+def dashboard(user=Depends(auth.get_current_user)):
+    tenant_id = user["tenant_id"]
+    now = datetime.now().astimezone()
+    start = (now - timedelta(days=6)).date()
+    query_rows = db.query(
+        "SELECT m.created_at FROM messages m JOIN sessions s "
+        "ON s.id = m.session_id AND s.tenant_id = m.tenant_id "
+        "WHERE m.tenant_id = ? AND m.role = 'user' AND m.created_at >= ?",
+        (tenant_id, now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()),
+    )
+    trend_counts = { (start + timedelta(days=i)).isoformat(): 0 for i in range(7) }
+    month_prefix = now.strftime("%Y-%m")
+    month_count = 0
+    for row in query_rows:
+        date_value = str(row["created_at"] or "")[:10]
+        if date_value in trend_counts:
+            trend_counts[date_value] += 1
+        if str(row["created_at"] or "").startswith(month_prefix):
+            month_count += 1
+    kbs = _tenant_usage(tenant_id)
+    return {
+        "stats": {
+            "knowledge_bases": len(kbs),
+            "documents": db.query_one("SELECT COUNT(*) AS n FROM documents WHERE tenant_id = ?", (tenant_id,))["n"],
+            "queries_this_month": month_count,
+            "members": db.query_one("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND deleted_at IS NULL", (tenant_id,))["n"],
+        },
+        "trend": [{"date": day, "count": count} for day, count in trend_counts.items()],
+        "top_knowledge_bases": kbs[:5],
+        "activity": _tenant_activity(tenant_id),
+    }
+
+
+@app.get("/api/analytics")
+def analytics(user=Depends(auth.get_current_user)):
+    tenant_id = user["tenant_id"]
+    now = datetime.now().astimezone()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    rows = db.query(
+        "SELECT m.content, m.created_at, k.name AS kb_name FROM messages m "
+        "JOIN sessions s ON s.id = m.session_id AND s.tenant_id = m.tenant_id "
+        "JOIN knowledge_bases k ON k.id = s.kb_id AND k.tenant_id = s.tenant_id "
+        "WHERE m.tenant_id = ? AND m.role = 'user' AND m.created_at >= ? ORDER BY m.created_at",
+        (tenant_id, month_start),
+    )
+    grouped = {}
+    daily = {}
+    for row in rows:
+        question = (row["content"] or "").strip()
+        key = (question[:180], row["kb_name"])
+        grouped[key] = grouped.get(key, 0) + 1
+        day = str(row["created_at"] or "")[:10]
+        daily[day] = daily.get(day, 0) + 1
+    return {
+        "queries_this_month": len(rows),
+        "active_members": db.query_one(
+            "SELECT COUNT(DISTINCT s.user_id) AS n FROM sessions s JOIN messages m "
+            "ON m.session_id = s.id AND m.tenant_id = s.tenant_id "
+            "WHERE s.tenant_id = ? AND m.role = 'user' AND m.created_at >= ?",
+            (tenant_id, month_start),
+        )["n"],
+        "trend": [{"date": day, "count": count} for day, count in sorted(daily.items())],
+        "knowledge_bases": _tenant_usage(tenant_id),
+        "top_questions": [
+            {"question": question, "knowledge_base": kb_name, "count": count}
+            for (question, kb_name), count in sorted(grouped.items(), key=lambda item: item[1], reverse=True)[:5]
+        ],
+    }
 
 
 @app.post("/api/kbs")
@@ -238,6 +398,69 @@ def delete_kb(kb_id: str, user=Depends(auth.require_admin)):
 
 
 # ---------- 文档 ----------
+
+@app.get("/api/documents")
+def list_all_documents(user=Depends(auth.get_current_user)):
+    return db.query(
+        "SELECT d.*, k.name AS knowledge_base_name FROM documents d "
+        "JOIN knowledge_bases k ON k.id = d.kb_id AND k.tenant_id = d.tenant_id "
+        "WHERE d.tenant_id = ? ORDER BY d.created_at DESC",
+        (user["tenant_id"],),
+    )
+
+
+@app.get("/api/documents/{doc_id}/preview")
+def preview_document(doc_id: str, user=Depends(auth.get_current_user)):
+    doc = db.query_one(
+        "SELECT d.*, k.name AS knowledge_base_name FROM documents d "
+        "JOIN knowledge_bases k ON k.id = d.kb_id AND k.tenant_id = d.tenant_id "
+        "WHERE d.id = ? AND d.tenant_id = ?",
+        (doc_id, user["tenant_id"]),
+    )
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    chunks = db.query(
+        "SELECT chunk_index, content, created_at FROM chunks "
+        "WHERE doc_id = ? AND tenant_id = ? ORDER BY chunk_index LIMIT 5",
+        (doc_id, user["tenant_id"]),
+    )
+    return {"document": doc, "chunks": chunks}
+
+
+@app.get("/api/documents/{doc_id}/file")
+def download_document(doc_id: str, user=Depends(auth.get_current_user)):
+    doc = db.query_one(
+        "SELECT id, filename FROM documents WHERE id = ? AND tenant_id = ?",
+        (doc_id, user["tenant_id"]),
+    )
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    paths = (
+        _original_path(user["tenant_id"], doc_id, doc["filename"]),
+        os.path.join(config.DOCUMENTS_DIR, f"{doc_id}_{doc['filename']}"),
+    )
+    path = next((candidate for candidate in paths if os.path.isfile(candidate)), None)
+    if not path:
+        raise HTTPException(404, "原始文件不存在")
+    return FileResponse(path, filename=doc["filename"])
+
+
+@app.post("/api/documents/bulk-delete")
+def bulk_delete_documents(req: BulkDocumentDelete, user=Depends(auth.require_admin)):
+    if len(req.document_ids) > 200:
+        raise HTTPException(400, "单次最多删除 200 份文档")
+    docs = []
+    for doc_id in set(req.document_ids):
+        doc = db.query_one(
+            "SELECT id, filename FROM documents WHERE id = ? AND tenant_id = ?",
+            (doc_id, user["tenant_id"]),
+        )
+        if doc:
+            docs.append(doc)
+    for doc in docs:
+        db.execute("DELETE FROM documents WHERE id = ? AND tenant_id = ?", (doc["id"], user["tenant_id"]))
+        _remove_original_file(user["tenant_id"], doc["id"], doc["filename"])
+    return {"deleted_count": len(docs)}
 
 @app.get("/api/kbs/{kb_id}/documents")
 def list_documents(kb_id: str, user=Depends(auth.get_current_user)):

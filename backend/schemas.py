@@ -41,3 +41,15 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[str] = None
+
+
+class TenantUpdate(BaseModel):
+    name: str
+
+
+class SettingsUpdate(BaseModel):
+    settings: dict
+
+
+class BulkDocumentDelete(BaseModel):
+    document_ids: list[str]

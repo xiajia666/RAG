@@ -137,6 +137,14 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TEXT NOT NULL,
     FOREIGN KEY (tenant_id, session_id) REFERENCES sessions(tenant_id, id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS tenant_settings (
+    tenant_id TEXT NOT NULL,
+    setting_key TEXT NOT NULL,
+    setting_value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, setting_key),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
 CREATE INDEX IF NOT EXISTS idx_chunks_tenant_kb ON chunks(tenant_id, kb_id);
 CREATE INDEX IF NOT EXISTS idx_documents_tenant_kb ON documents(tenant_id, kb_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_tenant_user ON sessions(tenant_id, user_id);
@@ -241,6 +249,14 @@ MYSQL_SCHEMA = (
         CONSTRAINT fk_messages_session FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
         CONSTRAINT fk_messages_tenant_session FOREIGN KEY (tenant_id, session_id) REFERENCES sessions(tenant_id, id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci""",
+    """CREATE TABLE IF NOT EXISTS tenant_settings (
+        tenant_id VARCHAR(32) NOT NULL,
+        setting_key VARCHAR(100) NOT NULL,
+        setting_value LONGTEXT NOT NULL,
+        updated_at VARCHAR(40) NOT NULL,
+        PRIMARY KEY (tenant_id, setting_key),
+        CONSTRAINT fk_tenant_settings_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci""",
 )
 
 
@@ -302,6 +318,23 @@ def executemany(sql, params_seq):
         conn.commit()
     finally:
         conn.close()
+
+
+def set_tenant_setting(tenant_id, key, value):
+    timestamp = now()
+    if config.DATABASE_BACKEND == "mysql":
+        execute(
+            "INSERT INTO tenant_settings (tenant_id, setting_key, setting_value, updated_at) "
+            "VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)",
+            (tenant_id, key, value, timestamp),
+        )
+    else:
+        execute(
+            "INSERT INTO tenant_settings (tenant_id, setting_key, setting_value, updated_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(tenant_id, setting_key) DO UPDATE SET "
+            "setting_value = excluded.setting_value, updated_at = excluded.updated_at",
+            (tenant_id, key, value, timestamp),
+        )
 
 
 def create_user_atomically(user_id, tenant_id, username, password_hash, role="user"):
