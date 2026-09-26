@@ -576,16 +576,17 @@ def download_document(doc_id: str, user=Depends(auth.get_current_user)):
 
 
 @app.post("/api/documents/bulk-delete")
-def bulk_delete_documents(req: BulkDocumentDelete, user=Depends(auth.require_admin)):
+def bulk_delete_documents(req: BulkDocumentDelete, user=Depends(auth.get_current_user)):
     if len(req.document_ids) > 200:
         raise HTTPException(400, "单次最多删除 200 份文档")
     docs = []
     for doc_id in set(req.document_ids):
         doc = db.query_one(
-            "SELECT id, filename FROM documents WHERE id = ? AND tenant_id = ?",
+            "SELECT id, kb_id, filename FROM documents WHERE id = ? AND tenant_id = ?",
             (doc_id, user["tenant_id"]),
         )
         if doc:
+            get_kb_for_user(doc["kb_id"], user, write=True)
             docs.append(doc)
     for doc in docs:
         db.execute("DELETE FROM documents WHERE id = ? AND tenant_id = ?", (doc["id"], user["tenant_id"]))
@@ -643,10 +644,11 @@ async def upload_document(kb_id: str, file: UploadFile = File(...),
 
 
 @app.delete("/api/documents/{doc_id}")
-def delete_document(doc_id: str, user=Depends(auth.require_admin)):
+def delete_document(doc_id: str, user=Depends(auth.get_current_user)):
     doc = db.query_one("SELECT * FROM documents WHERE id = ? AND tenant_id = ?", (doc_id, user["tenant_id"]))
     if not doc:
         raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user, write=True)
     db.execute("DELETE FROM documents WHERE id = ? AND tenant_id = ?", (doc_id, user["tenant_id"]))
     _remove_original_file(user["tenant_id"], doc_id, doc["filename"])
     return {"deleted": True}
@@ -659,7 +661,7 @@ def list_sessions(kb_id: str, user=Depends(auth.get_current_user)):
     get_kb_for_user(kb_id, user)
     return db.query(
         "SELECT s.id, s.title, s.created_at, "
-        "  (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count "
+        "  (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.tenant_id = s.tenant_id) AS message_count "
         "FROM sessions s WHERE s.tenant_id = ? AND s.kb_id = ? AND s.user_id = ? "
         "ORDER BY s.created_at DESC",
         (user["tenant_id"], kb_id, user["id"]),
@@ -773,6 +775,23 @@ def invite_user(req: InviteRequest, user=Depends(auth.require_admin)):
     return {"user": public_user(user_id, user["tenant_id"]), "temporary_password": temp_password}
 
 
+@app.post("/api/users/{user_id}/reset-password")
+def reset_user_password(user_id: str, user=Depends(auth.require_admin)):
+    target = db.query_one(
+        "SELECT id FROM users WHERE id = ? AND tenant_id = ? AND status = 1 AND deleted_at IS NULL",
+        (user_id, user["tenant_id"]),
+    )
+    if not target:
+        raise HTTPException(404, "用户不存在")
+    temp_password = secrets.token_urlsafe(12)
+    db.execute(
+        "UPDATE users SET password_hash = ?, token_version = token_version + 1, updated_at = ? "
+        "WHERE id = ? AND tenant_id = ?",
+        (auth.hash_password(temp_password), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id, user["tenant_id"]),
+    )
+    return {"temporary_password": temp_password}
+
+
 @app.post("/api/auth/change-password")
 def change_password(req: PasswordChange, user=Depends(auth.get_current_user)):
     stored = db.query_one(
@@ -807,6 +826,14 @@ def update_user(user_id: str, req: UserUpdate, user=Depends(auth.require_admin))
     if req.role in ("admin", "operator", "user"):
         if user_id == user["id"] and req.role != "admin":
             raise HTTPException(400, "不能取消自己的管理员权限")
+        if target["role"] == "admin" and req.role != "admin":
+            admin_count = db.query_one(
+                "SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND role = 'admin' "
+                "AND status = 1 AND deleted_at IS NULL",
+                (user["tenant_id"],),
+            )["n"]
+            if admin_count <= 1:
+                raise HTTPException(400, "企业至少需要保留一名管理员")
         db.execute(
             "UPDATE users SET role = ?, token_version = token_version + 1 WHERE id = ? AND tenant_id = ?",
             (req.role, user_id, user["tenant_id"]),

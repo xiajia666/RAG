@@ -134,3 +134,36 @@ CREATE TABLE IF NOT EXISTS messages (
   CONSTRAINT fk_messages_tenant_session
     FOREIGN KEY (tenant_id, session_id) REFERENCES sessions(tenant_id, id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tenant_settings (
+  tenant_id VARCHAR(32) NOT NULL,
+  setting_key VARCHAR(100) NOT NULL,
+  setting_value LONGTEXT NOT NULL,
+  updated_at VARCHAR(40) NOT NULL,
+  PRIMARY KEY (tenant_id, setting_key),
+  CONSTRAINT fk_tenant_settings_tenant
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS knowledge_base_access (
+  tenant_id VARCHAR(32) NOT NULL,
+  kb_id VARCHAR(32) NOT NULL,
+  access_mode VARCHAR(16) NOT NULL DEFAULT 'tenant',
+  updated_at VARCHAR(40) NOT NULL,
+  PRIMARY KEY (tenant_id, kb_id),
+  CONSTRAINT fk_kb_access_kb
+    FOREIGN KEY (tenant_id, kb_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS knowledge_base_members (
+  tenant_id VARCHAR(32) NOT NULL,
+  kb_id VARCHAR(32) NOT NULL,
+  user_id VARCHAR(32) NOT NULL,
+  role VARCHAR(16) NOT NULL DEFAULT 'reader',
+  created_at VARCHAR(40) NOT NULL,
+  PRIMARY KEY (tenant_id, kb_id, user_id),
+  CONSTRAINT fk_kb_members_kb
+    FOREIGN KEY (tenant_id, kb_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE,
+  CONSTRAINT fk_kb_members_user
+    FOREIGN KEY (tenant_id, user_id) REFERENCES users(tenant_id, id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
