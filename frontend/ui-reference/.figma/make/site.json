@@ -1,0 +1,10 @@
+{
+  "description": "Provides a streamlined login interface tailored for Retrieval-Augmented Generation products, enhancing user access and security for AI-driven applications.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

@@ -2,8 +2,9 @@ import os
 
 from dotenv import load_dotenv
 
-# 先加载 .env，这样 HOST / PORT / RELOAD 才能从 .env 里读到
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+# 先加载项目根目录的 .env，这样 HOST / PORT / RELOAD 才能从中读取
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 import uvicorn
 

@@ -1,0 +1,23 @@
+# Python
+.DS_Store
+.idea/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 密钥与本地配置
+.env
+
+# 本地数据（SQLite、上传的原始文件、自动生成的 JWT 密钥）
+backend/data/app.db
+backend/data/app.db-wal
+backend/data/app.db-shm
+backend/data/.jwt_secret
+backend/data/documents/
+backend/data/documents.json
+backend/data/sessions/
+
+# 前端
+frontend/node_modules/
+frontend/dist/
