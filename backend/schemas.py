@@ -1,7 +1,7 @@
 """Pydantic 请求模型。"""
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RegisterRequest(BaseModel):
@@ -53,3 +53,24 @@ class SettingsUpdate(BaseModel):
 
 class BulkDocumentDelete(BaseModel):
     document_ids: list[str]
+
+
+class InviteRequest(BaseModel):
+    email: str
+    role: Optional[str] = "user"
+    username: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class KnowledgeBaseMember(BaseModel):
+    user_id: str
+    role: str = "reader"
+
+
+class KnowledgeBaseMembersUpdate(BaseModel):
+    access_mode: str
+    members: list[KnowledgeBaseMember] = Field(default_factory=list)

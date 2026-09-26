@@ -1,4 +1,5 @@
 """向量切分与检索：云端 Embedding + 余弦相似度。"""
+import json
 import uuid
 
 import numpy as np
@@ -84,7 +85,15 @@ def search(tenant_id, kb_id, query, top_k=None):
     if not query:
         return []
 
-    top_k = top_k or config.RETRIEVAL_TOP_K
+    if top_k is None:
+        configured = db.query_one(
+            "SELECT setting_value FROM tenant_settings WHERE tenant_id = ? AND setting_key = 'top_k'",
+            (tenant_id,),
+        )
+        try:
+            top_k = int(json.loads(configured["setting_value"])) if configured else config.RETRIEVAL_TOP_K
+        except (TypeError, ValueError):
+            top_k = config.RETRIEVAL_TOP_K
 
     rows = db.query(
         "SELECT c.content AS content, c.embedding AS embedding, d.filename AS filename "

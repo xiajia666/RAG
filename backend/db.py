@@ -11,7 +11,8 @@ _lock = threading.Lock()
 
 
 def now():
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+    # Use MySQL DATETIME-compatible format while keeping SQLite sort-friendly timestamps.
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _connect():
@@ -145,6 +146,24 @@ CREATE TABLE IF NOT EXISTS tenant_settings (
     PRIMARY KEY (tenant_id, setting_key),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS knowledge_base_access (
+    tenant_id TEXT NOT NULL,
+    kb_id TEXT NOT NULL,
+    access_mode TEXT NOT NULL DEFAULT 'tenant',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, kb_id),
+    FOREIGN KEY (tenant_id, kb_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS knowledge_base_members (
+    tenant_id TEXT NOT NULL,
+    kb_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'reader',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, kb_id, user_id),
+    FOREIGN KEY (tenant_id, kb_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, user_id) REFERENCES users(tenant_id, id) ON DELETE CASCADE
+);
 CREATE INDEX IF NOT EXISTS idx_chunks_tenant_kb ON chunks(tenant_id, kb_id);
 CREATE INDEX IF NOT EXISTS idx_documents_tenant_kb ON documents(tenant_id, kb_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_tenant_user ON sessions(tenant_id, user_id);
@@ -257,6 +276,24 @@ MYSQL_SCHEMA = (
         PRIMARY KEY (tenant_id, setting_key),
         CONSTRAINT fk_tenant_settings_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci""",
+    """CREATE TABLE IF NOT EXISTS knowledge_base_access (
+        tenant_id VARCHAR(32) NOT NULL,
+        kb_id VARCHAR(32) NOT NULL,
+        access_mode VARCHAR(16) NOT NULL DEFAULT 'tenant',
+        updated_at VARCHAR(40) NOT NULL,
+        PRIMARY KEY (tenant_id, kb_id),
+        CONSTRAINT fk_kb_access_kb FOREIGN KEY (tenant_id, kb_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci""",
+    """CREATE TABLE IF NOT EXISTS knowledge_base_members (
+        tenant_id VARCHAR(32) NOT NULL,
+        kb_id VARCHAR(32) NOT NULL,
+        user_id VARCHAR(32) NOT NULL,
+        role VARCHAR(16) NOT NULL DEFAULT 'reader',
+        created_at VARCHAR(40) NOT NULL,
+        PRIMARY KEY (tenant_id, kb_id, user_id),
+        CONSTRAINT fk_kb_members_kb FOREIGN KEY (tenant_id, kb_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE,
+        CONSTRAINT fk_kb_members_user FOREIGN KEY (tenant_id, user_id) REFERENCES users(tenant_id, id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci""",
 )
 
 
@@ -337,7 +374,42 @@ def set_tenant_setting(tenant_id, key, value):
         )
 
 
-def create_user_atomically(user_id, tenant_id, username, password_hash, role="user"):
+def replace_kb_members(tenant_id, kb_id, access_mode, members):
+    """Atomically replace a knowledge base's access mode and explicit member roles."""
+    conn = _connect()
+    try:
+        if config.DATABASE_BACKEND == "mysql":
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO knowledge_base_access (tenant_id, kb_id, access_mode, updated_at) "
+                    "VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE access_mode = VALUES(access_mode), updated_at = VALUES(updated_at)",
+                    (tenant_id, kb_id, access_mode, now()),
+                )
+                cur.execute("DELETE FROM knowledge_base_members WHERE tenant_id = %s AND kb_id = %s", (tenant_id, kb_id))
+                if members:
+                    cur.executemany(
+                        "INSERT INTO knowledge_base_members (tenant_id, kb_id, user_id, role, created_at) VALUES (%s, %s, %s, %s, %s)",
+                        [(tenant_id, kb_id, member["user_id"], member["role"], now()) for member in members],
+                    )
+        else:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO knowledge_base_access (tenant_id, kb_id, access_mode, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(tenant_id, kb_id) DO UPDATE SET access_mode = excluded.access_mode, updated_at = excluded.updated_at",
+                (tenant_id, kb_id, access_mode, now()),
+            )
+            conn.execute("DELETE FROM knowledge_base_members WHERE tenant_id = ? AND kb_id = ?", (tenant_id, kb_id))
+            conn.executemany(
+                "INSERT INTO knowledge_base_members (tenant_id, kb_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                [(tenant_id, kb_id, member["user_id"], member["role"], now()) for member in members],
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+def create_user_atomically(user_id, tenant_id, username, password_hash, role="user", email=None):
     """Insert a user; username uniqueness is scoped to the tenant."""
     conn = _connect()
     try:
@@ -347,8 +419,8 @@ def create_user_atomically(user_id, tenant_id, username, password_hash, role="us
                 if cur.fetchone():
                     return None
                 cur.execute(
-                    "INSERT INTO users (id, tenant_id, username, password_hash, role, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (user_id, tenant_id, username, password_hash, role, now()),
+                    "INSERT INTO users (id, tenant_id, username, email, password_hash, role, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (user_id, tenant_id, username, email, password_hash, role, now()),
                 )
             conn.commit()
         else:
@@ -357,8 +429,8 @@ def create_user_atomically(user_id, tenant_id, username, password_hash, role="us
                 conn.rollback()
                 return None
             conn.execute(
-                "INSERT INTO users (id, tenant_id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, tenant_id, username, password_hash, role, now()),
+                "INSERT INTO users (id, tenant_id, username, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, tenant_id, username, email, password_hash, role, now()),
             )
             conn.commit()
         return role
