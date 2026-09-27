@@ -22,9 +22,13 @@ pipeline {
                     sh '''
                     ssh -o StrictHostKeyChecking=no root@123.57.80.38 "
 
+                    source /root/rag_backend/bin/activate
+
                     cd /root/RAG/backend &&
 
                     git pull &&
+
+                    pip install -r /root/RAG/backend/requirements.txt
 
                     systemctl restart rag-backend &&
 
