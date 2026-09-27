@@ -1,0 +1,41 @@
+pipeline {
+
+    agent any
+
+    stages {
+
+        stage('拉取代码') {
+            steps {
+                git(
+                    url: 'https://github.com/xiajia666/RAG.git',
+                    branch: 'main'
+                )
+            }
+        }
+
+
+        stage('部署后端') {
+            steps {
+
+                sshagent(['prod-server']) {
+
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no root@服务器IP "
+
+                    cd /root/RAG/backend &&
+
+                    git pull &&
+
+                    systemctl restart rag-backend &&
+
+                    systemctl status rag-backend --no-pager
+
+                    "
+                    '''
+
+                }
+
+            }
+        }
+    }
+}
