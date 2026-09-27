@@ -17,7 +17,7 @@ pipeline {
         stage('部署后端') {
             steps {
 
-                sshagent(['prod-server']) {
+                sshagent(['a3e6c2a5-eb32-4b3d-bcc8-1eb8039c16d3']) {
 
                     sh '''
                     ssh -o StrictHostKeyChecking=no root@123.57.80.38 "
