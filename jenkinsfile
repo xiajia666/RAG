@@ -20,7 +20,7 @@ pipeline {
                 sshagent(['prod-server']) {
 
                     sh '''
-                    ssh -o StrictHostKeyChecking=no root@服务器IP "
+                    ssh -o StrictHostKeyChecking=no root@123.57.80.38 "
 
                     cd /root/RAG/backend &&
 
