@@ -74,7 +74,7 @@ python backend/main.py  # 生产模式，同时服务 API 与前端产物
 uvicorn app:app --reload --port 8000 --app-dir backend
 ```
 
-也可以在 MySQL 管理端执行 `backend/mysql_init.sql`。执行前，将 SQL 中两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
+MySQL 初始化和历史租户迁移 SQL 已集中在 `backend/mysql_all.sql`。新部署只需执行文件中的“新库初始化”部分；已经完成租户迁移的现有数据库无需重跑历史迁移部分。执行前，将初始化部分两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
 
 ```env
 DATABASE_BACKEND=mysql
