@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import and_, case, delete, distinct, func, insert, select, update
 
 import auth
 import config
@@ -78,9 +79,9 @@ def build_messages(history, query, results):
 
 def public_user(user_id, tenant_id):
     return db.query_one(
-        "SELECT id, tenant_id, username, email, phone, nickname, avatar, role, status, created_at "
-        "FROM users WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL",
-        (user_id, tenant_id),
+        select(db.User.id, db.User.tenant_id, db.User.username, db.User.email, db.User.phone,
+               db.User.nickname, db.User.avatar, db.User.role, db.User.status, db.User.created_at)
+        .where(db.User.id == user_id, db.User.tenant_id == tenant_id, db.User.deleted_at.is_(None)),
     )
 
 
@@ -110,21 +111,22 @@ def _normalize_tenant_code(value):
 
 
 def get_kb_or_404(kb_id, tenant_id):
-    kb = db.query_one("SELECT * FROM knowledge_bases WHERE id = ? AND tenant_id = ?", (kb_id, tenant_id))
+    kb = db.query_one(select(db.KnowledgeBase).where(
+        db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == tenant_id
+    ))
     if not kb:
         raise HTTPException(404, "知识库不存在")
     return kb
 
 
 def _kb_membership(kb_id, user):
-    mode = db.query_one(
-        "SELECT access_mode FROM knowledge_base_access WHERE tenant_id = ? AND kb_id = ?",
-        (user["tenant_id"], kb_id),
-    )
-    membership = db.query_one(
-        "SELECT role FROM knowledge_base_members WHERE tenant_id = ? AND kb_id = ? AND user_id = ?",
-        (user["tenant_id"], kb_id, user["id"]),
-    )
+    mode = db.query_one(select(db.KnowledgeBaseAccess.access_mode).where(
+        db.KnowledgeBaseAccess.tenant_id == user["tenant_id"], db.KnowledgeBaseAccess.kb_id == kb_id
+    ))
+    membership = db.query_one(select(db.KnowledgeBaseMember.role).where(
+        db.KnowledgeBaseMember.tenant_id == user["tenant_id"], db.KnowledgeBaseMember.kb_id == kb_id,
+        db.KnowledgeBaseMember.user_id == user["id"],
+    ))
     access_mode = mode["access_mode"] if mode else "tenant"
     if user["role"] == "admin" or access_mode == "tenant":
         return access_mode, membership
@@ -146,7 +148,7 @@ def get_kb_for_user(kb_id, user, write=False):
 
 def accessible_kb_ids(user):
     ids = []
-    for kb in db.query("SELECT id FROM knowledge_bases WHERE tenant_id = ?", (user["tenant_id"],)):
+    for kb in db.query(select(db.KnowledgeBase.id).where(db.KnowledgeBase.tenant_id == user["tenant_id"])):
         try:
             _kb_membership(kb["id"], user)
             ids.append(kb["id"])
@@ -195,7 +197,7 @@ def register(req: RegisterRequest):
         )
     except Exception as exc:
         # Tenant codes are unique; do not expose raw SQL errors to clients.
-        if getattr(exc, "args", ()) and exc.args[0] in (1062, 19):
+        if db.is_duplicate_error(exc):
             raise HTTPException(409, "租户代码已被使用") from exc
         raise
     return {
@@ -211,18 +213,18 @@ def login(req: LoginRequest, request: Request):
     username = unicodedata.normalize("NFKC", raw_username).casefold()
     tenant_code = _normalize_tenant_code(req.tenant_code)
     user = db.query_one(
-        "SELECT u.* FROM users u JOIN tenants t ON t.id = u.tenant_id "
-        "WHERE t.tenant_code = ? AND t.status = 1 AND u.username = ? "
-        "AND u.status = 1 AND u.deleted_at IS NULL",
-        (tenant_code, username),
+        select(db.User)
+        .join(db.Tenant, db.Tenant.id == db.User.tenant_id)
+        .where(
+            db.Tenant.tenant_code == tenant_code, db.Tenant.status == 1,
+            db.User.username == username, db.User.status == 1, db.User.deleted_at.is_(None),
+        ),
     )
     if not user or not auth.verify_password(req.password or "", user["password_hash"]):
         raise HTTPException(401, "用户名或密码错误")
     last_login_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    db.execute(
-        "UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ? AND tenant_id = ?",
-        (last_login_at, request.client.host if request.client else None, user["id"], user["tenant_id"]),
-    )
+    db.execute(update(db.User).where(db.User.id == user["id"], db.User.tenant_id == user["tenant_id"])
+               .values(last_login_at=last_login_at, last_login_ip=request.client.host if request.client else None))
     return {
         "token": auth.create_token(user["id"], user["tenant_id"], user["token_version"]),
         "tenant_code": tenant_code,
@@ -237,10 +239,8 @@ def me(user=Depends(auth.get_current_user)):
 
 @app.get("/api/tenant")
 def get_tenant(user=Depends(auth.get_current_user)):
-    tenant = db.query_one(
-        "SELECT id, tenant_code, name, created_at FROM tenants WHERE id = ? AND status = 1",
-        (user["tenant_id"],),
-    )
+    tenant = db.query_one(select(db.Tenant.id, db.Tenant.tenant_code, db.Tenant.name, db.Tenant.created_at)
+                          .where(db.Tenant.id == user["tenant_id"], db.Tenant.status == 1))
     if not tenant:
         raise HTTPException(404, "企业不存在")
     return tenant
@@ -251,19 +251,15 @@ def update_tenant(req: TenantUpdate, user=Depends(auth.require_admin)):
     name = req.name.strip()
     if not name or len(name) > 128:
         raise HTTPException(400, "企业名称不能为空且不能超过 128 个字符")
-    db.execute(
-        "UPDATE tenants SET name = ?, updated_at = ? WHERE id = ?",
-        (name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user["tenant_id"]),
-    )
+    db.execute(update(db.Tenant).where(db.Tenant.id == user["tenant_id"])
+               .values(name=name, updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     return get_tenant(user)
 
 
 @app.get("/api/settings")
 def get_settings(user=Depends(auth.get_current_user)):
-    rows = db.query(
-        "SELECT setting_key, setting_value FROM tenant_settings WHERE tenant_id = ?",
-        (user["tenant_id"],),
-    )
+    rows = db.query(select(db.TenantSetting.setting_key, db.TenantSetting.setting_value)
+                    .where(db.TenantSetting.tenant_id == user["tenant_id"]))
     result = {}
     for row in rows:
         try:
@@ -303,10 +299,11 @@ def update_settings(req: SettingsUpdate, user=Depends(auth.require_admin)):
 def list_kbs(user=Depends(auth.get_current_user)):
     accessible = set(accessible_kb_ids(user))
     visible = [kb for kb in db.query(
-        "SELECT k.*, "
-        "  (SELECT COUNT(*) FROM documents d WHERE d.tenant_id = k.tenant_id AND d.kb_id = k.id) AS document_count "
-        "FROM knowledge_bases k WHERE k.tenant_id = ? ORDER BY k.created_at DESC",
-        (user["tenant_id"],),
+        select(db.KnowledgeBase, func.count(db.Document.id).label("document_count"))
+        .outerjoin(db.Document, and_(db.Document.tenant_id == db.KnowledgeBase.tenant_id,
+                                     db.Document.kb_id == db.KnowledgeBase.id))
+        .where(db.KnowledgeBase.tenant_id == user["tenant_id"])
+        .group_by(db.KnowledgeBase.id).order_by(db.KnowledgeBase.created_at.desc())
     ) if kb["id"] in accessible]
     for kb in visible:
         mode, membership = _kb_membership(kb["id"], user)
@@ -320,16 +317,15 @@ def list_kbs(user=Depends(auth.get_current_user)):
 def _tenant_activity(tenant_id, kb_ids, limit=8):
     if not kb_ids:
         return []
-    placeholders = ",".join("?" for _ in kb_ids)
     docs = db.query(
-        f"SELECT d.filename AS target, d.created_at FROM documents d "
-        f"WHERE d.tenant_id = ? AND d.kb_id IN ({placeholders}) ORDER BY d.created_at DESC LIMIT ?",
-        (tenant_id, *kb_ids, limit),
+        select(db.Document.filename.label("target"), db.Document.created_at)
+        .where(db.Document.tenant_id == tenant_id, db.Document.kb_id.in_(kb_ids))
+        .order_by(db.Document.created_at.desc()).limit(limit),
     )
     kbs = db.query(
-        f"SELECT name AS target, created_at FROM knowledge_bases WHERE tenant_id = ? AND id IN ({placeholders}) "
-        "ORDER BY created_at DESC LIMIT ?",
-        (tenant_id, *kb_ids, limit),
+        select(db.KnowledgeBase.name.label("target"), db.KnowledgeBase.created_at)
+        .where(db.KnowledgeBase.tenant_id == tenant_id, db.KnowledgeBase.id.in_(kb_ids))
+        .order_by(db.KnowledgeBase.created_at.desc()).limit(limit),
     )
     events = [
         {"type": "upload", "target": row["target"], "actor": "成员", "created_at": row["created_at"]}
@@ -344,16 +340,21 @@ def _tenant_activity(tenant_id, kb_ids, limit=8):
 def _tenant_usage(tenant_id, kb_ids):
     if not kb_ids:
         return []
-    placeholders = ",".join("?" for _ in kb_ids)
     kb_rows = db.query(
-        "SELECT k.id, k.name, COUNT(DISTINCT d.id) AS document_count, "
-        "COUNT(DISTINCT CASE WHEN m.role = 'user' THEN m.id END) AS query_count "
-        "FROM knowledge_bases k LEFT JOIN documents d ON d.tenant_id = k.tenant_id AND d.kb_id = k.id "
-        "LEFT JOIN sessions s ON s.tenant_id = k.tenant_id AND s.kb_id = k.id "
-        "LEFT JOIN messages m ON m.tenant_id = s.tenant_id AND m.session_id = s.id "
-        f"WHERE k.tenant_id = ? AND k.id IN ({placeholders}) "
-        "GROUP BY k.id, k.name ORDER BY query_count DESC, k.name",
-        (tenant_id, *kb_ids),
+        select(
+            db.KnowledgeBase.id, db.KnowledgeBase.name,
+            func.count(distinct(db.Document.id)).label("document_count"),
+            func.count(distinct(case((db.Message.role == "user", db.Message.id)))).label("query_count"),
+        )
+        .outerjoin(db.Document, and_(db.Document.tenant_id == db.KnowledgeBase.tenant_id,
+                                     db.Document.kb_id == db.KnowledgeBase.id))
+        .outerjoin(db.ChatSession, and_(db.ChatSession.tenant_id == db.KnowledgeBase.tenant_id,
+                                        db.ChatSession.kb_id == db.KnowledgeBase.id))
+        .outerjoin(db.Message, and_(db.Message.tenant_id == db.ChatSession.tenant_id,
+                                    db.Message.session_id == db.ChatSession.id))
+        .where(db.KnowledgeBase.tenant_id == tenant_id, db.KnowledgeBase.id.in_(kb_ids))
+        .group_by(db.KnowledgeBase.id, db.KnowledgeBase.name)
+        .order_by(func.count(distinct(case((db.Message.role == "user", db.Message.id)))).desc(), db.KnowledgeBase.name),
     )
     return kb_rows
 
@@ -369,18 +370,20 @@ def dashboard(user=Depends(auth.get_current_user)):
         document_count = 0
         activity = []
     else:
-        placeholders = ",".join("?" for _ in kb_ids)
         query_rows = db.query(
-            f"SELECT m.created_at FROM messages m JOIN sessions s "
-            f"ON s.id = m.session_id AND s.tenant_id = m.tenant_id "
-            f"WHERE m.tenant_id = ? AND m.role = 'user' AND s.kb_id IN ({placeholders}) AND m.created_at >= ?",
-            (tenant_id, *kb_ids, now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")),
+            select(db.Message.created_at)
+            .join(db.ChatSession, and_(db.ChatSession.id == db.Message.session_id,
+                                       db.ChatSession.tenant_id == db.Message.tenant_id))
+            .where(
+                db.Message.tenant_id == tenant_id, db.Message.role == "user",
+                db.ChatSession.kb_id.in_(kb_ids),
+                db.Message.created_at >= now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S"),
+            ),
         )
         usage = _tenant_usage(tenant_id, kb_ids)
-        document_count = db.query_one(
-            f"SELECT COUNT(*) AS n FROM documents WHERE tenant_id = ? AND kb_id IN ({placeholders})",
-            (tenant_id, *kb_ids),
-        )["n"]
+        document_count = db.query_one(select(func.count(db.Document.id).label("n")).where(
+            db.Document.tenant_id == tenant_id, db.Document.kb_id.in_(kb_ids)
+        ))["n"]
         activity = _tenant_activity(tenant_id, kb_ids)
     start = (now - timedelta(days=6)).date()
     trend_counts = { (start + timedelta(days=i)).isoformat(): 0 for i in range(7) }
@@ -397,7 +400,9 @@ def dashboard(user=Depends(auth.get_current_user)):
             "knowledge_bases": len(usage),
             "documents": document_count,
             "queries_this_month": month_count,
-            "members": db.query_one("SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND deleted_at IS NULL", (tenant_id,))["n"],
+            "members": db.query_one(select(func.count(db.User.id).label("n")).where(
+                db.User.tenant_id == tenant_id, db.User.deleted_at.is_(None)
+            ))["n"],
         },
         "trend": [{"date": day, "count": count} for day, count in trend_counts.items()],
         "top_knowledge_bases": usage[:5],
@@ -411,15 +416,19 @@ def analytics(user=Depends(auth.get_current_user)):
     kb_ids = accessible_kb_ids(user)
     if not kb_ids:
         return {"queries_this_month": 0, "active_members": 0, "trend": [], "knowledge_bases": [], "top_questions": []}
-    placeholders = ",".join("?" for _ in kb_ids)
     now = datetime.now().astimezone()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
     rows = db.query(
-        "SELECT m.content, m.created_at, k.name AS kb_name FROM messages m "
-        "JOIN sessions s ON s.id = m.session_id AND s.tenant_id = m.tenant_id "
-        "JOIN knowledge_bases k ON k.id = s.kb_id AND k.tenant_id = s.tenant_id "
-        f"WHERE m.tenant_id = ? AND m.role = 'user' AND k.id IN ({placeholders}) AND m.created_at >= ? ORDER BY m.created_at",
-        (tenant_id, *kb_ids, month_start.replace("T", " ").split("+")[0]),
+        select(db.Message.content, db.Message.created_at, db.KnowledgeBase.name.label("kb_name"))
+        .join(db.ChatSession, and_(db.ChatSession.id == db.Message.session_id,
+                                   db.ChatSession.tenant_id == db.Message.tenant_id))
+        .join(db.KnowledgeBase, and_(db.KnowledgeBase.id == db.ChatSession.kb_id,
+                                     db.KnowledgeBase.tenant_id == db.ChatSession.tenant_id))
+        .where(
+            db.Message.tenant_id == tenant_id, db.Message.role == "user",
+            db.KnowledgeBase.id.in_(kb_ids),
+            db.Message.created_at >= month_start.replace("T", " ").split("+")[0],
+        ).order_by(db.Message.created_at),
     )
     grouped = {}
     daily = {}
@@ -432,10 +441,13 @@ def analytics(user=Depends(auth.get_current_user)):
     return {
         "queries_this_month": len(rows),
         "active_members": db.query_one(
-            "SELECT COUNT(DISTINCT s.user_id) AS n FROM sessions s JOIN messages m "
-            "ON m.session_id = s.id AND m.tenant_id = s.tenant_id "
-            f"WHERE s.tenant_id = ? AND s.kb_id IN ({placeholders}) AND m.role = 'user' AND m.created_at >= ?",
-            (tenant_id, *kb_ids, month_start.replace("T", " ").split("+")[0]),
+            select(func.count(distinct(db.ChatSession.user_id)).label("n"))
+            .join(db.Message, and_(db.Message.session_id == db.ChatSession.id,
+                                   db.Message.tenant_id == db.ChatSession.tenant_id))
+            .where(
+                db.ChatSession.tenant_id == tenant_id, db.ChatSession.kb_id.in_(kb_ids),
+                db.Message.role == "user", db.Message.created_at >= month_start.replace("T", " ").split("+")[0],
+            )
         )["n"],
         "trend": [{"date": day, "count": count} for day, count in sorted(daily.items())],
         "knowledge_bases": _tenant_usage(tenant_id, kb_ids),
@@ -452,27 +464,31 @@ def create_kb(req: KBRequest, user=Depends(auth.require_admin)):
     if not name:
         raise HTTPException(400, "知识库名称不能为空")
     kb_id = uuid.uuid4().hex
-    db.execute(
-        "INSERT INTO knowledge_bases (id, tenant_id, name, description, created_by, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (kb_id, user["tenant_id"], name, (req.description or "").strip(), user["id"], db.now()),
-    )
-    return db.query_one("SELECT * FROM knowledge_bases WHERE id = ? AND tenant_id = ?", (kb_id, user["tenant_id"]))
+    db.execute(insert(db.KnowledgeBase).values(
+        id=kb_id, tenant_id=user["tenant_id"], name=name, description=(req.description or "").strip(),
+        created_by=user["id"], created_at=db.now(),
+    ))
+    return db.query_one(select(db.KnowledgeBase).where(
+        db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == user["tenant_id"]
+    ))
 
 
 @app.get("/api/kbs/{kb_id}/members")
 def list_kb_members(kb_id: str, user=Depends(auth.require_admin)):
     get_kb_or_404(kb_id, user["tenant_id"])
-    access = db.query_one(
-        "SELECT access_mode FROM knowledge_base_access WHERE tenant_id = ? AND kb_id = ?",
-        (user["tenant_id"], kb_id),
-    )
+    access = db.query_one(select(db.KnowledgeBaseAccess.access_mode).where(
+        db.KnowledgeBaseAccess.tenant_id == user["tenant_id"], db.KnowledgeBaseAccess.kb_id == kb_id
+    ))
     members = db.query(
-        "SELECT u.id AS user_id, u.username, u.email, u.role AS tenant_role, m.role AS kb_role "
-        "FROM users u LEFT JOIN knowledge_base_members m "
-        "ON m.tenant_id = u.tenant_id AND m.user_id = u.id AND m.kb_id = ? "
-        "WHERE u.tenant_id = ? AND u.status = 1 AND u.deleted_at IS NULL ORDER BY u.created_at",
-        (kb_id, user["tenant_id"]),
+        select(db.User.id.label("user_id"), db.User.username, db.User.email,
+               db.User.role.label("tenant_role"), db.KnowledgeBaseMember.role.label("kb_role"))
+        .outerjoin(db.KnowledgeBaseMember, and_(
+            db.KnowledgeBaseMember.tenant_id == db.User.tenant_id,
+            db.KnowledgeBaseMember.user_id == db.User.id,
+            db.KnowledgeBaseMember.kb_id == kb_id,
+        ))
+        .where(db.User.tenant_id == user["tenant_id"], db.User.status == 1, db.User.deleted_at.is_(None))
+        .order_by(db.User.created_at),
     )
     return {"access_mode": access["access_mode"] if access else "tenant", "members": members}
 
@@ -492,10 +508,10 @@ def update_kb_members(kb_id: str, req: KnowledgeBaseMembersUpdate, user=Depends(
         seen.add(member["user_id"])
         if member["role"] not in ("editor", "reader"):
             raise HTTPException(400, "知识库角色必须是编辑或只读")
-        if not db.query_one(
-            "SELECT id FROM users WHERE id = ? AND tenant_id = ? AND status = 1 AND deleted_at IS NULL",
-            (member["user_id"], user["tenant_id"]),
-        ):
+        if not db.query_one(select(db.User.id).where(
+            db.User.id == member["user_id"], db.User.tenant_id == user["tenant_id"],
+            db.User.status == 1, db.User.deleted_at.is_(None),
+        )):
             raise HTTPException(400, "所选成员不属于当前企业或已停用")
     db.replace_kb_members(user["tenant_id"], kb_id, req.access_mode, members)
     return list_kb_members(kb_id, user)
@@ -506,19 +522,24 @@ def update_kb(kb_id: str, req: KBRequest, user=Depends(auth.require_admin)):
     kb = get_kb_or_404(kb_id, user["tenant_id"])
     name = (req.name or "").strip() or kb["name"]
     description = req.description if req.description is not None else kb["description"]
-    db.execute(
-        "UPDATE knowledge_bases SET name = ?, description = ? WHERE id = ? AND tenant_id = ?",
-        (name, description, kb_id, user["tenant_id"]),
-    )
-    return db.query_one("SELECT * FROM knowledge_bases WHERE id = ? AND tenant_id = ?", (kb_id, user["tenant_id"]))
+    db.execute(update(db.KnowledgeBase).where(
+        db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == user["tenant_id"]
+    ).values(name=name, description=description))
+    return db.query_one(select(db.KnowledgeBase).where(
+        db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == user["tenant_id"]
+    ))
 
 
 @app.delete("/api/kbs/{kb_id}")
 def delete_kb(kb_id: str, user=Depends(auth.require_admin)):
     get_kb_or_404(kb_id, user["tenant_id"])
-    docs = db.query("SELECT id, filename FROM documents WHERE tenant_id = ? AND kb_id = ?", (user["tenant_id"], kb_id))
+    docs = db.query(select(db.Document.id, db.Document.filename).where(
+        db.Document.tenant_id == user["tenant_id"], db.Document.kb_id == kb_id
+    ))
     # 级联删除 docs / chunks / sessions / messages
-    db.execute("DELETE FROM knowledge_bases WHERE id = ? AND tenant_id = ?", (kb_id, user["tenant_id"]))
+    db.execute(delete(db.KnowledgeBase).where(
+        db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == user["tenant_id"]
+    ))
     for d in docs:
         _remove_original_file(user["tenant_id"], d["id"], d["filename"])
     return {"deleted": True}
@@ -530,28 +551,28 @@ def delete_kb(kb_id: str, user=Depends(auth.require_admin)):
 def list_all_documents(user=Depends(auth.get_current_user)):
     visible = set(accessible_kb_ids(user))
     return [doc for doc in db.query(
-        "SELECT d.*, k.name AS knowledge_base_name FROM documents d "
-        "JOIN knowledge_bases k ON k.id = d.kb_id AND k.tenant_id = d.tenant_id "
-        "WHERE d.tenant_id = ? ORDER BY d.created_at DESC",
-        (user["tenant_id"],),
+        select(db.Document, db.KnowledgeBase.name.label("knowledge_base_name"))
+        .join(db.KnowledgeBase, and_(db.KnowledgeBase.id == db.Document.kb_id,
+                                     db.KnowledgeBase.tenant_id == db.Document.tenant_id))
+        .where(db.Document.tenant_id == user["tenant_id"]).order_by(db.Document.created_at.desc()),
     ) if doc["kb_id"] in visible]
 
 
 @app.get("/api/documents/{doc_id}/preview")
 def preview_document(doc_id: str, user=Depends(auth.get_current_user)):
     doc = db.query_one(
-        "SELECT d.*, k.name AS knowledge_base_name FROM documents d "
-        "JOIN knowledge_bases k ON k.id = d.kb_id AND k.tenant_id = d.tenant_id "
-        "WHERE d.id = ? AND d.tenant_id = ?",
-        (doc_id, user["tenant_id"]),
+        select(db.Document, db.KnowledgeBase.name.label("knowledge_base_name"))
+        .join(db.KnowledgeBase, and_(db.KnowledgeBase.id == db.Document.kb_id,
+                                     db.KnowledgeBase.tenant_id == db.Document.tenant_id))
+        .where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]),
     )
     if not doc:
         raise HTTPException(404, "文档不存在")
     get_kb_for_user(doc["kb_id"], user)
     chunks = db.query(
-        "SELECT chunk_index, content, created_at FROM chunks "
-        "WHERE doc_id = ? AND tenant_id = ? ORDER BY chunk_index LIMIT 5",
-        (doc_id, user["tenant_id"]),
+        select(db.Chunk.chunk_index, db.Chunk.content, db.Chunk.created_at)
+        .where(db.Chunk.doc_id == doc_id, db.Chunk.tenant_id == user["tenant_id"])
+        .order_by(db.Chunk.chunk_index).limit(5),
     )
     return {"document": doc, "chunks": chunks}
 
@@ -559,8 +580,8 @@ def preview_document(doc_id: str, user=Depends(auth.get_current_user)):
 @app.get("/api/documents/{doc_id}/file")
 def download_document(doc_id: str, user=Depends(auth.get_current_user)):
     doc = db.query_one(
-        "SELECT id, kb_id, filename FROM documents WHERE id = ? AND tenant_id = ?",
-        (doc_id, user["tenant_id"]),
+        select(db.Document.id, db.Document.kb_id, db.Document.filename)
+        .where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]),
     )
     if not doc:
         raise HTTPException(404, "文档不存在")
@@ -582,14 +603,14 @@ def bulk_delete_documents(req: BulkDocumentDelete, user=Depends(auth.get_current
     docs = []
     for doc_id in set(req.document_ids):
         doc = db.query_one(
-            "SELECT id, kb_id, filename FROM documents WHERE id = ? AND tenant_id = ?",
-            (doc_id, user["tenant_id"]),
+            select(db.Document.id, db.Document.kb_id, db.Document.filename)
+            .where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]),
         )
         if doc:
             get_kb_for_user(doc["kb_id"], user, write=True)
             docs.append(doc)
     for doc in docs:
-        db.execute("DELETE FROM documents WHERE id = ? AND tenant_id = ?", (doc["id"], user["tenant_id"]))
+        db.execute(delete(db.Document).where(db.Document.id == doc["id"], db.Document.tenant_id == user["tenant_id"]))
         _remove_original_file(user["tenant_id"], doc["id"], doc["filename"])
     return {"deleted_count": len(docs)}
 
@@ -597,8 +618,8 @@ def bulk_delete_documents(req: BulkDocumentDelete, user=Depends(auth.get_current
 def list_documents(kb_id: str, user=Depends(auth.get_current_user)):
     get_kb_for_user(kb_id, user)
     return db.query(
-        "SELECT * FROM documents WHERE tenant_id = ? AND kb_id = ? ORDER BY created_at DESC",
-        (user["tenant_id"], kb_id),
+        select(db.Document).where(db.Document.tenant_id == user["tenant_id"], db.Document.kb_id == kb_id)
+        .order_by(db.Document.created_at.desc()),
     )
 
 
@@ -621,11 +642,10 @@ async def upload_document(kb_id: str, file: UploadFile = File(...),
         raise HTTPException(400, "未能从文件中提取到文本（可能是扫描版 PDF）")
 
     doc_id = uuid.uuid4().hex
-    db.execute(
-        "INSERT INTO documents (id, tenant_id, kb_id, filename, size, chunk_count, created_at) "
-        "VALUES (?, ?, ?, ?, ?, 0, ?)",
-        (doc_id, user["tenant_id"], kb_id, filename, len(data), db.now()),
-    )
+    db.execute(insert(db.Document).values(
+        id=doc_id, tenant_id=user["tenant_id"], kb_id=kb_id, filename=filename,
+        size=len(data), chunk_count=0, created_at=db.now(),
+    ))
     with open(_original_path(user["tenant_id"], doc_id, filename), "wb") as f:
         f.write(data)
 
@@ -633,23 +653,23 @@ async def upload_document(kb_id: str, file: UploadFile = File(...),
         chunk_count = vector_store.index_document(user["tenant_id"], doc_id, kb_id, filename, text)
     except Exception as e:
         # 向量化失败则回滚，避免留下半截数据
-        db.execute("DELETE FROM documents WHERE id = ? AND tenant_id = ?", (doc_id, user["tenant_id"]))
+        db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
         _remove_original_file(user["tenant_id"], doc_id, filename)
         raise HTTPException(500, f"向量化失败：{e}")
 
     return {
-        "document": db.query_one("SELECT * FROM documents WHERE id = ? AND tenant_id = ?", (doc_id, user["tenant_id"])),
+        "document": db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"])),
         "chunk_count": chunk_count,
     }
 
 
 @app.delete("/api/documents/{doc_id}")
 def delete_document(doc_id: str, user=Depends(auth.get_current_user)):
-    doc = db.query_one("SELECT * FROM documents WHERE id = ? AND tenant_id = ?", (doc_id, user["tenant_id"]))
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
     if not doc:
         raise HTTPException(404, "文档不存在")
     get_kb_for_user(doc["kb_id"], user, write=True)
-    db.execute("DELETE FROM documents WHERE id = ? AND tenant_id = ?", (doc_id, user["tenant_id"]))
+    db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
     _remove_original_file(user["tenant_id"], doc_id, doc["filename"])
     return {"deleted": True}
 
@@ -660,11 +680,16 @@ def delete_document(doc_id: str, user=Depends(auth.get_current_user)):
 def list_sessions(kb_id: str, user=Depends(auth.get_current_user)):
     get_kb_for_user(kb_id, user)
     return db.query(
-        "SELECT s.id, s.title, s.created_at, "
-        "  (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.tenant_id = s.tenant_id) AS message_count "
-        "FROM sessions s WHERE s.tenant_id = ? AND s.kb_id = ? AND s.user_id = ? "
-        "ORDER BY s.created_at DESC",
-        (user["tenant_id"], kb_id, user["id"]),
+        select(
+            db.ChatSession.id, db.ChatSession.title, db.ChatSession.created_at,
+            select(func.count(db.Message.id)).where(
+                db.Message.session_id == db.ChatSession.id,
+                db.Message.tenant_id == db.ChatSession.tenant_id,
+            ).scalar_subquery().label("message_count"),
+        )
+        .where(db.ChatSession.tenant_id == user["tenant_id"], db.ChatSession.kb_id == kb_id,
+               db.ChatSession.user_id == user["id"])
+        .order_by(db.ChatSession.created_at.desc()),
     )
 
 
@@ -673,29 +698,30 @@ def create_session(kb_id: str, req: SessionCreate, user=Depends(auth.get_current
     get_kb_for_user(kb_id, user)
     session_id = uuid.uuid4().hex
     title = (req.title or "").strip() or "新会话"
-    db.execute(
-        "INSERT INTO sessions (id, tenant_id, user_id, kb_id, title, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (session_id, user["tenant_id"], user["id"], kb_id, title, db.now()),
-    )
+    db.execute(insert(db.ChatSession).values(
+        id=session_id, tenant_id=user["tenant_id"], user_id=user["id"], kb_id=kb_id,
+        title=title, created_at=db.now(),
+    ))
     return db.query_one(
-        "SELECT id, title, kb_id, created_at FROM sessions WHERE id = ? AND tenant_id = ?",
-        (session_id, user["tenant_id"]),
+        select(db.ChatSession.id, db.ChatSession.title, db.ChatSession.kb_id, db.ChatSession.created_at)
+        .where(db.ChatSession.id == session_id, db.ChatSession.tenant_id == user["tenant_id"]),
     )
 
 
 @app.get("/api/sessions/{session_id}")
 def get_session(session_id: str, user=Depends(auth.get_current_user)):
     session = db.query_one(
-        "SELECT id, title, kb_id, created_at FROM sessions WHERE id = ? AND user_id = ? AND tenant_id = ?",
-        (session_id, user["id"], user["tenant_id"]),
+        select(db.ChatSession.id, db.ChatSession.title, db.ChatSession.kb_id, db.ChatSession.created_at)
+        .where(db.ChatSession.id == session_id, db.ChatSession.user_id == user["id"],
+               db.ChatSession.tenant_id == user["tenant_id"]),
     )
     if not session:
         raise HTTPException(404, "会话不存在")
     get_kb_for_user(session["kb_id"], user)
     messages = db.query(
-        "SELECT id, role, content, sources FROM messages WHERE session_id = ? AND tenant_id = ? ORDER BY id",
-        (session_id, user["tenant_id"]),
+        select(db.Message.id, db.Message.role, db.Message.content, db.Message.sources)
+        .where(db.Message.session_id == session_id, db.Message.tenant_id == user["tenant_id"])
+        .order_by(db.Message.id),
     )
     for m in messages:
         try:
@@ -709,16 +735,19 @@ def get_session(session_id: str, user=Depends(auth.get_current_user)):
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: str, user=Depends(auth.get_current_user)):
     if user["role"] == "admin":
-        session = db.query_one("SELECT * FROM sessions WHERE id = ? AND tenant_id = ?", (session_id, user["tenant_id"]))
+        session = db.query_one(select(db.ChatSession).where(
+            db.ChatSession.id == session_id, db.ChatSession.tenant_id == user["tenant_id"]
+        ))
     else:
-        session = db.query_one(
-            "SELECT * FROM sessions WHERE id = ? AND user_id = ? AND tenant_id = ?",
-            (session_id, user["id"], user["tenant_id"]),
-        )
+        session = db.query_one(select(db.ChatSession).where(
+            db.ChatSession.id == session_id, db.ChatSession.user_id == user["id"],
+            db.ChatSession.tenant_id == user["tenant_id"],
+        ))
     if not session:
         raise HTTPException(404, "会话不存在")
     get_kb_for_user(session["kb_id"], user)
-    db.execute("DELETE FROM sessions WHERE id = ? AND tenant_id = ?", (session_id, user["tenant_id"]))
+    db.execute(delete(db.ChatSession).where(db.ChatSession.id == session_id,
+                                            db.ChatSession.tenant_id == user["tenant_id"]))
     return {"deleted": True}
 
 
@@ -727,9 +756,10 @@ def delete_session(session_id: str, user=Depends(auth.get_current_user)):
 @app.get("/api/users")
 def list_users(user=Depends(auth.require_admin)):
     return db.query(
-        "SELECT id, tenant_id, username, email, phone, nickname, avatar, role, status, created_at "
-        "FROM users WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY created_at",
-        (user["tenant_id"],),
+        select(db.User.id, db.User.tenant_id, db.User.username, db.User.email, db.User.phone,
+               db.User.nickname, db.User.avatar, db.User.role, db.User.status, db.User.created_at)
+        .where(db.User.tenant_id == user["tenant_id"], db.User.deleted_at.is_(None))
+        .order_by(db.User.created_at),
     )
 
 
@@ -745,7 +775,7 @@ def create_user(req: UserCreate, user=Depends(auth.require_admin)):
             user_id, user["tenant_id"], username, auth.hash_password(password), role
         )
     except Exception as exc:
-        if getattr(exc, "args", ()) and exc.args[0] in (1062, 19):
+        if db.is_duplicate_error(exc):
             raise HTTPException(409, "用户名已存在") from exc
         raise
     if created_role is None:
@@ -767,7 +797,7 @@ def invite_user(req: InviteRequest, user=Depends(auth.require_admin)):
             user_id, user["tenant_id"], username, auth.hash_password(temp_password), role, email
         )
     except Exception as exc:
-        if getattr(exc, "args", ()) and exc.args[0] in (1062, 19):
+        if db.is_duplicate_error(exc):
             raise HTTPException(409, "登录用户名已存在，请为成员填写其他用户名") from exc
         raise
     if created is None:
@@ -777,67 +807,59 @@ def invite_user(req: InviteRequest, user=Depends(auth.require_admin)):
 
 @app.post("/api/users/{user_id}/reset-password")
 def reset_user_password(user_id: str, user=Depends(auth.require_admin)):
-    target = db.query_one(
-        "SELECT id FROM users WHERE id = ? AND tenant_id = ? AND status = 1 AND deleted_at IS NULL",
-        (user_id, user["tenant_id"]),
-    )
+    target = db.query_one(select(db.User.id).where(
+        db.User.id == user_id, db.User.tenant_id == user["tenant_id"], db.User.status == 1,
+        db.User.deleted_at.is_(None),
+    ))
     if not target:
         raise HTTPException(404, "用户不存在")
     temp_password = secrets.token_urlsafe(12)
-    db.execute(
-        "UPDATE users SET password_hash = ?, token_version = token_version + 1, updated_at = ? "
-        "WHERE id = ? AND tenant_id = ?",
-        (auth.hash_password(temp_password), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id, user["tenant_id"]),
-    )
+    db.execute(update(db.User).where(db.User.id == user_id, db.User.tenant_id == user["tenant_id"])
+               .values(password_hash=auth.hash_password(temp_password),
+                       token_version=db.User.token_version + 1,
+                       updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     return {"temporary_password": temp_password}
 
 
 @app.post("/api/auth/change-password")
 def change_password(req: PasswordChange, user=Depends(auth.get_current_user)):
-    stored = db.query_one(
-        "SELECT password_hash FROM users WHERE id = ? AND tenant_id = ? AND status = 1 AND deleted_at IS NULL",
-        (user["id"], user["tenant_id"]),
-    )
+    stored = db.query_one(select(db.User.password_hash).where(
+        db.User.id == user["id"], db.User.tenant_id == user["tenant_id"],
+        db.User.status == 1, db.User.deleted_at.is_(None),
+    ))
     if not stored or not auth.verify_password(req.current_password, stored["password_hash"]):
         raise HTTPException(400, "当前密码不正确")
     _validate_new_password(req.new_password or "")
     version = user["token_version"] + 1
-    db.execute(
-        "UPDATE users SET password_hash = ?, token_version = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
-        (auth.hash_password(req.new_password), version, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user["id"], user["tenant_id"]),
-    )
+    db.execute(update(db.User).where(db.User.id == user["id"], db.User.tenant_id == user["tenant_id"])
+               .values(password_hash=auth.hash_password(req.new_password), token_version=version,
+                       updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     return {"token": auth.create_token(user["id"], user["tenant_id"], version)}
 
 
 @app.patch("/api/users/{user_id}")
 def update_user(user_id: str, req: UserUpdate, user=Depends(auth.require_admin)):
-    target = db.query_one(
-        "SELECT * FROM users WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL",
-        (user_id, user["tenant_id"]),
-    )
+    target = db.query_one(select(db.User).where(
+        db.User.id == user_id, db.User.tenant_id == user["tenant_id"], db.User.deleted_at.is_(None)
+    ))
     if not target:
         raise HTTPException(404, "用户不存在")
     if req.password:
         _validate_new_password(req.password)
-        db.execute(
-            "UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ? AND tenant_id = ?",
-            (auth.hash_password(req.password), user_id, user["tenant_id"]),
-        )
+        db.execute(update(db.User).where(db.User.id == user_id, db.User.tenant_id == user["tenant_id"])
+                   .values(password_hash=auth.hash_password(req.password), token_version=db.User.token_version + 1))
     if req.role in ("admin", "operator", "user"):
         if user_id == user["id"] and req.role != "admin":
             raise HTTPException(400, "不能取消自己的管理员权限")
         if target["role"] == "admin" and req.role != "admin":
-            admin_count = db.query_one(
-                "SELECT COUNT(*) AS n FROM users WHERE tenant_id = ? AND role = 'admin' "
-                "AND status = 1 AND deleted_at IS NULL",
-                (user["tenant_id"],),
-            )["n"]
+            admin_count = db.query_one(select(func.count(db.User.id).label("n")).where(
+                db.User.tenant_id == user["tenant_id"], db.User.role == "admin",
+                db.User.status == 1, db.User.deleted_at.is_(None),
+            ))["n"]
             if admin_count <= 1:
                 raise HTTPException(400, "企业至少需要保留一名管理员")
-        db.execute(
-            "UPDATE users SET role = ?, token_version = token_version + 1 WHERE id = ? AND tenant_id = ?",
-            (req.role, user_id, user["tenant_id"]),
-        )
+        db.execute(update(db.User).where(db.User.id == user_id, db.User.tenant_id == user["tenant_id"])
+                   .values(role=req.role, token_version=db.User.token_version + 1))
     return public_user(user_id, user["tenant_id"])
 
 
@@ -845,20 +867,16 @@ def update_user(user_id: str, req: UserUpdate, user=Depends(auth.require_admin))
 def delete_user(user_id: str, user=Depends(auth.require_admin)):
     if user_id == user["id"]:
         raise HTTPException(400, "不能删除自己")
-    if not db.query_one(
-        "SELECT * FROM users WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL",
-        (user_id, user["tenant_id"]),
-    ):
+    if not db.query_one(select(db.User.id).where(
+        db.User.id == user_id, db.User.tenant_id == user["tenant_id"], db.User.deleted_at.is_(None)
+    )):
         raise HTTPException(404, "用户不存在")
-    db.execute(
-        "DELETE FROM knowledge_base_members WHERE tenant_id = ? AND user_id = ?",
-        (user["tenant_id"], user_id),
-    )
-    db.execute(
-        "UPDATE users SET status = 0, deleted_at = ?, token_version = token_version + 1 "
-        "WHERE id = ? AND tenant_id = ?",
-        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id, user["tenant_id"]),
-    )
+    db.execute(delete(db.KnowledgeBaseMember).where(
+        db.KnowledgeBaseMember.tenant_id == user["tenant_id"], db.KnowledgeBaseMember.user_id == user_id
+    ))
+    db.execute(update(db.User).where(db.User.id == user_id, db.User.tenant_id == user["tenant_id"])
+               .values(status=0, deleted_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                       token_version=db.User.token_version + 1))
     return {"deleted": True}
 
 
@@ -876,8 +894,10 @@ def chat_stream(req: ChatRequest, user=Depends(auth.get_current_user)):
 
     if session_id:
         session = db.query_one(
-            "SELECT * FROM sessions WHERE id = ? AND user_id = ? AND tenant_id = ?",
-            (session_id, user["id"], user["tenant_id"]),
+            select(db.ChatSession).where(
+                db.ChatSession.id == session_id, db.ChatSession.user_id == user["id"],
+                db.ChatSession.tenant_id == user["tenant_id"],
+            ),
         )
         if not session:
             raise HTTPException(404, "会话不存在")
@@ -885,17 +905,17 @@ def chat_stream(req: ChatRequest, user=Depends(auth.get_current_user)):
             raise HTTPException(400, "会话不属于该知识库")
     else:
         session_id = uuid.uuid4().hex
-        db.execute(
-            "INSERT INTO sessions (id, tenant_id, user_id, kb_id, title, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (session_id, user["tenant_id"], user["id"], kb_id, query[:20], db.now()),
-        )
+        db.execute(insert(db.ChatSession).values(
+            id=session_id, tenant_id=user["tenant_id"], user_id=user["id"],
+            kb_id=kb_id, title=query[:20], created_at=db.now(),
+        ))
 
     def generate():
         results = vector_store.search(user["tenant_id"], kb_id, query)
         history = db.query(
-            "SELECT role, content FROM messages WHERE session_id = ? AND tenant_id = ? ORDER BY id",
-            (session_id, user["tenant_id"]),
+            select(db.Message.role, db.Message.content)
+            .where(db.Message.session_id == session_id, db.Message.tenant_id == user["tenant_id"])
+            .order_by(db.Message.id),
         )
         messages = build_messages(history, query, results)
 
@@ -920,18 +940,15 @@ def chat_stream(req: ChatRequest, user=Depends(auth.get_current_user)):
 
         # 流结束后保存本轮问答
         now = db.now()
-        db.execute(
-            "INSERT INTO messages (tenant_id, session_id, role, content, sources, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (user["tenant_id"], session_id, "user", query, "[]", now),
-        )
+        db.execute(insert(db.Message).values(
+            tenant_id=user["tenant_id"], session_id=session_id, role="user", content=query,
+            sources="[]", created_at=now,
+        ))
         if full_answer:
-            db.execute(
-                "INSERT INTO messages (tenant_id, session_id, role, content, sources, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (user["tenant_id"], session_id, "assistant", full_answer,
-                 json.dumps(sources, ensure_ascii=False), now),
-            )
+            db.execute(insert(db.Message).values(
+                tenant_id=user["tenant_id"], session_id=session_id, role="assistant", content=full_answer,
+                sources=json.dumps(sources, ensure_ascii=False), created_at=now,
+            ))
 
         yield "data: [DONE]\n\n"
 

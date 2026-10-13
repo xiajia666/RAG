@@ -11,7 +11,9 @@ import secrets
 import ssl
 from pathlib import Path
 
-import pymysql
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine import URL
+from sqlalchemy.exc import SQLAlchemyError
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env"
@@ -51,42 +53,33 @@ def main():
     app_password = secrets.token_urlsafe(36)
     tls = ssl.create_default_context(cafile=args.ssl_ca)
     try:
-        conn = pymysql.connect(
-            host=args.host,
-            port=args.port,
-            user="root",
-            password=root_password,
-            charset="utf8mb4",
-            cursorclass=pymysql.cursors.DictCursor,
-            autocommit=True,
-            ssl=tls,
-            connect_timeout=10,
+        admin_engine = create_engine(
+            URL.create("mysql+pymysql", username="root", password=root_password, host=args.host, port=args.port,
+                       query={"charset": "utf8mb4"}),
+            connect_args={"ssl": tls, "connect_timeout": 10},
+            pool_pre_ping=True,
         )
-    except pymysql.MySQLError as exc:
-        reason = str(exc.args[1]) if len(exc.args) > 1 else exc.__class__.__name__
+        conn = admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+    except SQLAlchemyError as exc:
+        orig = getattr(exc, "orig", None)
+        args_tuple = getattr(orig, "args", ())
+        reason = str(args_tuple[1]) if len(args_tuple) > 1 else exc.__class__.__name__
         raise SystemExit(
-            f"无法连接到 {args.host}:{args.port}（MySQL 错误 {exc.args[0] if exc.args else 'unknown'}：{reason}）。"
+            f"无法连接到 {args.host}:{args.port}（MySQL 错误 {args_tuple[0] if args_tuple else 'unknown'}：{reason}）。"
             "未创建数据库或账号，且未修改 .env。请确认端口、防火墙白名单和 MySQL 远程访问设置。"
         ) from None
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT VERSION() AS version")
-            server_version = cur.fetchone()["version"]
-            cur.execute(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(DATABASE)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-            cur.execute(
-                "CREATE USER IF NOT EXISTS %s@%s IDENTIFIED BY %s REQUIRE SSL",
-                (APP_USER, APP_HOST, app_password),
-            )
-            cur.execute(
-                "ALTER USER %s@%s IDENTIFIED BY %s REQUIRE SSL",
-                (APP_USER, APP_HOST, app_password),
-            )
-            cur.execute(
-                f"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX ON {quote_identifier(DATABASE)}.* TO %s@%s",
-                (APP_USER, APP_HOST),
-            )
+        server_version = conn.exec_driver_sql("SELECT VERSION() AS version").mappings().first()["version"]
+        conn.exec_driver_sql(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(DATABASE)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        conn.exec_driver_sql("CREATE USER IF NOT EXISTS %s@%s IDENTIFIED BY %s REQUIRE SSL", (APP_USER, APP_HOST, app_password))
+        conn.exec_driver_sql("ALTER USER %s@%s IDENTIFIED BY %s REQUIRE SSL", (APP_USER, APP_HOST, app_password))
+        conn.exec_driver_sql(
+            f"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX ON {quote_identifier(DATABASE)}.* TO %s@%s",
+            (APP_USER, APP_HOST),
+        )
     finally:
         conn.close()
+        admin_engine.dispose()
 
     # Configure the application account, never the MySQL root account.
     values = {
@@ -106,7 +99,7 @@ def main():
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import db
 
-    tables = db.query("SHOW TABLES")
+    tables = inspect(db.engine).get_table_names()
     set_env_values(values)
     print(f"MySQL {server_version}: 已创建数据库 {DATABASE}，应用用户 {APP_USER}，并初始化 {len(tables)} 张 RAG 数据表。")
     print("连接配置已写入项目根目录 .env；root 密码未保存。")

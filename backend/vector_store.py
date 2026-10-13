@@ -3,6 +3,7 @@ import json
 import uuid
 
 import numpy as np
+from sqlalchemy import insert, select, update
 
 import config
 import db
@@ -52,23 +53,22 @@ def index_document(tenant_id, doc_id, kb_id, filename, content):
     now = db.now()
     rows = []
     for i, (chunk_text, vec) in enumerate(zip(chunks, vectors)):
-        rows.append((
-            uuid.uuid4().hex,
-            tenant_id,
-            doc_id,
-            kb_id,
-            i,
-            chunk_text,
-            vec.astype(np.float32).tobytes(),
-            now,
-        ))
+        rows.append({
+            "id": uuid.uuid4().hex,
+            "tenant_id": tenant_id,
+            "doc_id": doc_id,
+            "kb_id": kb_id,
+            "chunk_index": i,
+            "content": chunk_text,
+            "embedding": vec.astype(np.float32).tobytes(),
+            "created_at": now,
+        })
 
-    db.executemany(
-        "INSERT INTO chunks (id, tenant_id, doc_id, kb_id, chunk_index, content, embedding, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        rows,
+    db.executemany(insert(db.Chunk), rows)
+    db.execute(
+        update(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == tenant_id)
+        .values(chunk_count=len(rows))
     )
-    db.execute("UPDATE documents SET chunk_count = ? WHERE id = ? AND tenant_id = ?", (len(rows), doc_id, tenant_id))
     return len(rows)
 
 
@@ -86,20 +86,18 @@ def search(tenant_id, kb_id, query, top_k=None):
         return []
 
     if top_k is None:
-        configured = db.query_one(
-            "SELECT setting_value FROM tenant_settings WHERE tenant_id = ? AND setting_key = 'top_k'",
-            (tenant_id,),
-        )
+        configured = db.query_one(select(db.TenantSetting.setting_value).where(
+            db.TenantSetting.tenant_id == tenant_id, db.TenantSetting.setting_key == "top_k"
+        ))
         try:
             top_k = int(json.loads(configured["setting_value"])) if configured else config.RETRIEVAL_TOP_K
         except (TypeError, ValueError):
             top_k = config.RETRIEVAL_TOP_K
 
     rows = db.query(
-        "SELECT c.content AS content, c.embedding AS embedding, d.filename AS filename "
-        "FROM chunks c JOIN documents d ON d.id = c.doc_id "
-        "WHERE c.tenant_id = ? AND d.tenant_id = ? AND c.kb_id = ?",
-        (tenant_id, tenant_id, kb_id),
+        select(db.Chunk.content, db.Chunk.embedding, db.Document.filename)
+        .join(db.Document, db.Document.id == db.Chunk.doc_id)
+        .where(db.Chunk.tenant_id == tenant_id, db.Document.tenant_id == tenant_id, db.Chunk.kb_id == kb_id)
     )
     rows = [r for r in rows if r.get("embedding")]
     if not rows:

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
+from sqlalchemy import select
 from fastapi import Depends, Header, HTTPException
 
 import config
@@ -52,10 +53,16 @@ def get_current_user(authorization: str = Header(default="")) -> dict:
     if not user_id or not tenant_id or token_version is None:
         raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
     user = db.query_one(
-        "SELECT u.* FROM users u JOIN tenants t ON t.id = u.tenant_id "
-        "WHERE u.id = ? AND u.tenant_id = ? AND u.token_version = ? "
-        "AND u.status = 1 AND u.deleted_at IS NULL AND t.status = 1",
-        (user_id, tenant_id, token_version),
+        select(db.User)
+        .join(db.Tenant, db.Tenant.id == db.User.tenant_id)
+        .where(
+            db.User.id == user_id,
+            db.User.tenant_id == tenant_id,
+            db.User.token_version == token_version,
+            db.User.status == 1,
+            db.User.deleted_at.is_(None),
+            db.Tenant.status == 1,
+        )
     )
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")

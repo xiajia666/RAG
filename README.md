@@ -17,7 +17,7 @@
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Python 3.11 · FastAPI · MySQL / SQLite · numpy · DeepSeek（问答）· 云端 Embedding（检索） |
+| 后端 | Python 3.11 · FastAPI · SQLAlchemy（MySQL / SQLite）· numpy · DeepSeek（问答）· 云端 Embedding（检索） |
 | 前端 | React 18 · TypeScript · Vite · Tailwind CSS 4 · react-router · react-markdown |
 
 ## 目录结构
