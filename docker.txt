@@ -14,3 +14,18 @@ docker run -d \
 -e MYSQL_ROOT_PASSWORD=123456 \
 -v /data/mysql:/var/lib/mysql \
 mysql:8.0
+
+
+
+--------------------------------------------- 启动 Qdrant --------------------------------------------
+# 创建数据目录
+mkdir -p /data/qdrant
+
+# 启动 Qdrant
+docker run -d \
+  --name qdrant \
+  --restart=always \
+  -p 6333:6333 \
+  -p 6334:6334 \
+  -v /data/qdrant:/qdrant/storage \
+  qdrant/qdrant:latest
