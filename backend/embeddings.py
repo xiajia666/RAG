@@ -32,11 +32,17 @@ def embed_texts(texts):
             input=list(texts[i:i + batch]),
         )
         # 部分兼容服务返回顺序不保证与 input 一致，按 index 排序
-        items = sorted(resp.data, key=lambda d: getattr(d, "index", 0))
+        items = sorted(resp.data, key=lambda d: d.index)
+        expected_count = len(texts[i:i + batch])
+        if [item.index for item in items] != list(range(expected_count)):
+            raise ValueError("Embedding 服务返回的向量数量或索引与输入不匹配")
         vectors.extend([it.embedding for it in items])
 
     arr = np.asarray(vectors, dtype=np.float32)
+    if arr.ndim != 2 or arr.shape[0] != len(texts) or arr.shape[1] == 0 or not np.isfinite(arr).all():
+        raise ValueError("Embedding 服务返回了无效向量")
     # 归一化后余弦相似度等价于点积
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
+    if not np.isfinite(norms).all() or (norms == 0).any():
+        raise ValueError("Embedding 服务返回了零向量或无效向量")
     return arr / norms

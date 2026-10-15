@@ -39,6 +39,13 @@ EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "").strip()
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3").strip()
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
 
+# ---------- Qdrant 向量存储 ----------
+QDRANT_URL = os.getenv("QDRANT_URL", "http://127.0.0.1:6333").strip()
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "").strip()
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "rag_chunks").strip()
+QDRANT_TIMEOUT = int(os.getenv("QDRANT_TIMEOUT", "30"))
+QDRANT_BATCH_SIZE = int(os.getenv("QDRANT_BATCH_SIZE", "64"))
+
 # ---------- 认证 ----------
 
 def _load_jwt_secret():

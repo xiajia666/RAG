@@ -17,6 +17,7 @@ import config
 import db
 import llm
 import parsing
+import qdrant_store
 import vector_store
 from schemas import (
     ChatRequest,
@@ -536,6 +537,10 @@ def delete_kb(kb_id: str, user=Depends(auth.require_admin)):
     docs = db.query(select(db.Document.id, db.Document.filename).where(
         db.Document.tenant_id == user["tenant_id"], db.Document.kb_id == kb_id
     ))
+    try:
+        qdrant_store.delete_knowledge_base(user["tenant_id"], kb_id)
+    except Exception as exc:
+        raise HTTPException(503, "向量索引删除失败，请稍后重试") from exc
     # 级联删除 docs / chunks / sessions / messages
     db.execute(delete(db.KnowledgeBase).where(
         db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == user["tenant_id"]
@@ -610,6 +615,10 @@ def bulk_delete_documents(req: BulkDocumentDelete, user=Depends(auth.get_current
             get_kb_for_user(doc["kb_id"], user, write=True)
             docs.append(doc)
     for doc in docs:
+        try:
+            qdrant_store.delete_document(user["tenant_id"], doc["kb_id"], doc["id"])
+        except Exception as exc:
+            raise HTTPException(503, "向量索引删除失败，请稍后重试") from exc
         db.execute(delete(db.Document).where(db.Document.id == doc["id"], db.Document.tenant_id == user["tenant_id"]))
         _remove_original_file(user["tenant_id"], doc["id"], doc["filename"])
     return {"deleted_count": len(docs)}
@@ -624,11 +633,13 @@ def list_documents(kb_id: str, user=Depends(auth.get_current_user)):
 
 
 @app.post("/api/kbs/{kb_id}/documents")
-async def upload_document(kb_id: str, file: UploadFile = File(...),
-                          user=Depends(auth.get_current_user)):
+def upload_document(kb_id: str, file: UploadFile = File(...),
+                    user=Depends(auth.get_current_user)):
     get_kb_for_user(kb_id, user, write=True)
     filename = os.path.basename((file.filename or "unnamed").replace("\\", "/"))
-    data = await file.read()
+    # Parsing, SQL, Embedding and Qdrant clients are synchronous; FastAPI runs
+    # this handler in its thread pool so indexing does not block the event loop.
+    data = file.file.read()
     if not data:
         raise HTTPException(400, "文件为空")
 
@@ -646,16 +657,15 @@ async def upload_document(kb_id: str, file: UploadFile = File(...),
         id=doc_id, tenant_id=user["tenant_id"], kb_id=kb_id, filename=filename,
         size=len(data), chunk_count=0, created_at=db.now(),
     ))
-    with open(_original_path(user["tenant_id"], doc_id, filename), "wb") as f:
-        f.write(data)
-
     try:
+        with open(_original_path(user["tenant_id"], doc_id, filename), "wb") as f:
+            f.write(data)
         chunk_count = vector_store.index_document(user["tenant_id"], doc_id, kb_id, filename, text)
     except Exception as e:
         # 向量化失败则回滚，避免留下半截数据
         db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
         _remove_original_file(user["tenant_id"], doc_id, filename)
-        raise HTTPException(500, f"向量化失败：{e}")
+        raise HTTPException(500, f"文档索引失败：{e}") from e
 
     return {
         "document": db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"])),
@@ -669,6 +679,10 @@ def delete_document(doc_id: str, user=Depends(auth.get_current_user)):
     if not doc:
         raise HTTPException(404, "文档不存在")
     get_kb_for_user(doc["kb_id"], user, write=True)
+    try:
+        qdrant_store.delete_document(user["tenant_id"], doc["kb_id"], doc_id)
+    except Exception as exc:
+        raise HTTPException(503, "向量索引删除失败，请稍后重试") from exc
     db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
     _remove_original_file(user["tenant_id"], doc_id, doc["filename"])
     return {"deleted": True}
@@ -911,7 +925,11 @@ def chat_stream(req: ChatRequest, user=Depends(auth.get_current_user)):
         ))
 
     def generate():
-        results = vector_store.search(user["tenant_id"], kb_id, query)
+        try:
+            results = vector_store.search(user["tenant_id"], kb_id, query)
+        except Exception:
+            yield sse_event({"type": "error", "message": "知识库检索失败，请检查向量服务配置后重试"})
+            return
         history = db.query(
             select(db.Message.role, db.Message.content)
             .where(db.Message.session_id == session_id, db.Message.tenant_id == user["tenant_id"])
