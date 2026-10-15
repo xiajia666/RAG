@@ -18,14 +18,15 @@ mysql:8.0
 
 
 --------------------------------------------- 启动 Qdrant --------------------------------------------
-# 创建数据目录
-mkdir -p /data/qdrant
+# 1. 停止并删除旧容器
+docker stop qdrant && docker rm qdrant
 
-# 启动 Qdrant
+# 2. 用带 API Key 的方式重启
 docker run -d \
   --name qdrant \
   --restart=always \
   -p 6333:6333 \
   -p 6334:6334 \
   -v /data/qdrant:/qdrant/storage \
+  -e QDRANT__SERVICE__API_KEY=123456 \
   qdrant/qdrant:latest
