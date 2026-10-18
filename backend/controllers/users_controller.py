@@ -12,6 +12,7 @@ from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import InviteRequest, UserCreate, UserUpdate
 from services import document_service
 
+# 查询当前企业的有效用户列表。
 @api.get('/api/users')
 def list_users(user=AdminUser()):
     return db.query(
@@ -22,6 +23,7 @@ def list_users(user=AdminUser()):
     )
 
 
+# 在当前企业创建用户。
 @api.post('/api/users')
 def create_user(req: UserCreate, user=AdminUser()):
     username = _normalize_username(req.username)
@@ -42,6 +44,7 @@ def create_user(req: UserCreate, user=AdminUser()):
     return public_user(user_id, user["tenant_id"])
 
 
+# 创建受邀用户并生成临时密码。
 @api.post('/api/users/invite')
 def invite_user(req: InviteRequest, user=AdminUser()):
     email = (req.email or "").strip().lower()
@@ -64,6 +67,7 @@ def invite_user(req: InviteRequest, user=AdminUser()):
     return {"user": public_user(user_id, user["tenant_id"]), "temporary_password": temp_password}
 
 
+# 重置指定用户的密码并返回临时密码。
 @api.post('/api/users/{user_id}/reset-password')
 def reset_user_password(user_id: str, user=AdminUser()):
     target = db.query_one(select(db.User.id).where(
@@ -80,6 +84,7 @@ def reset_user_password(user_id: str, user=AdminUser()):
     return {"temporary_password": temp_password}
 
 
+# 修改指定用户的密码或企业角色。
 @api.patch('/api/users/{user_id}')
 def update_user(user_id: str, req: UserUpdate, user=AdminUser()):
     target = db.query_one(select(db.User).where(
@@ -106,6 +111,7 @@ def update_user(user_id: str, req: UserUpdate, user=AdminUser()):
     return public_user(user_id, user["tenant_id"])
 
 
+# 停用指定用户并清理其知识库成员关系。
 @api.delete('/api/users/{user_id}')
 def delete_user(user_id: str, user=AdminUser()):
     if user_id == user["id"]:

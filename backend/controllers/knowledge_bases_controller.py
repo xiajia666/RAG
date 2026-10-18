@@ -14,6 +14,7 @@ from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import KBRequest, KnowledgeBaseMembersUpdate, SessionCreate
 from services import document_service
 
+# 查询当前用户可访问的知识库列表。
 @api.get('/api/kbs')
 def list_kbs(user=CurrentUser()):
     accessible = set(accessible_kb_ids(user))
@@ -33,6 +34,7 @@ def list_kbs(user=CurrentUser()):
     return visible
 
 
+# 在当前企业创建知识库。
 @api.post('/api/kbs')
 def create_kb(req: KBRequest, user=AdminUser()):
     name = req.name.strip()
@@ -48,6 +50,7 @@ def create_kb(req: KBRequest, user=AdminUser()):
     ))
 
 
+# 查询知识库的访问模式和成员权限。
 @api.get('/api/kbs/{kb_id}/members')
 def list_kb_members(kb_id: str, user=AdminUser()):
     get_kb_or_404(kb_id, user["tenant_id"])
@@ -68,6 +71,7 @@ def list_kb_members(kb_id: str, user=AdminUser()):
     return {"access_mode": access["access_mode"] if access else "tenant", "members": members}
 
 
+# 设置知识库访问模式及成员角色。
 @api.put('/api/kbs/{kb_id}/members')
 def update_kb_members(kb_id: str, req: KnowledgeBaseMembersUpdate, user=AdminUser()):
     get_kb_or_404(kb_id, user["tenant_id"])
@@ -92,6 +96,7 @@ def update_kb_members(kb_id: str, req: KnowledgeBaseMembersUpdate, user=AdminUse
     return list_kb_members(kb_id, user)
 
 
+# 修改知识库名称或描述。
 @api.patch('/api/kbs/{kb_id}')
 def update_kb(kb_id: str, req: KBRequest, user=AdminUser()):
     kb = get_kb_or_404(kb_id, user["tenant_id"])
@@ -105,6 +110,7 @@ def update_kb(kb_id: str, req: KBRequest, user=AdminUser()):
     ))
 
 
+# 删除知识库及其关联文档、会话和文件。
 @api.delete('/api/kbs/{kb_id}')
 def delete_kb(kb_id: str, user=AdminUser()):
     get_kb_or_404(kb_id, user["tenant_id"])
@@ -120,6 +126,7 @@ def delete_kb(kb_id: str, user=AdminUser()):
     return {"deleted": True}
 
 
+# 查询指定知识库中的文档。
 @api.get('/api/kbs/{kb_id}/documents')
 def list_documents(kb_id: str, user=CurrentUser()):
     get_kb_for_user(kb_id, user)
@@ -129,6 +136,7 @@ def list_documents(kb_id: str, user=CurrentUser()):
     )
 
 
+# 上传文档并执行解析、分块和向量入库。
 @api.post('/api/kbs/{kb_id}/documents')
 def upload_document(kb_id: str, file,
                           user=CurrentUser()):
@@ -141,6 +149,7 @@ def upload_document(kb_id: str, file,
         raise HTTPException(exc.status_code, str(exc)) from exc
 
 
+# 查询当前用户在知识库中的会话列表。
 @api.get('/api/kbs/{kb_id}/sessions')
 def list_sessions(kb_id: str, user=CurrentUser()):
     get_kb_for_user(kb_id, user)
@@ -158,6 +167,7 @@ def list_sessions(kb_id: str, user=CurrentUser()):
     )
 
 
+# 在指定知识库中创建聊天会话。
 @api.post('/api/kbs/{kb_id}/sessions')
 def create_session(kb_id: str, req: SessionCreate, user=CurrentUser()):
     get_kb_for_user(kb_id, user)

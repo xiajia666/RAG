@@ -11,6 +11,7 @@ from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import SettingsUpdate, TenantUpdate
 from services import document_service
 
+# 获取当前企业的基本资料。
 @api.get('/api/tenant')
 def get_tenant(user=CurrentUser()):
     tenant = db.query_one(select(db.Tenant.id, db.Tenant.tenant_code, db.Tenant.name, db.Tenant.created_at)
@@ -20,6 +21,7 @@ def get_tenant(user=CurrentUser()):
     return tenant
 
 
+# 修改当前企业名称。
 @api.patch('/api/tenant')
 def update_tenant(req: TenantUpdate, user=AdminUser()):
     name = req.name.strip()
@@ -30,6 +32,7 @@ def update_tenant(req: TenantUpdate, user=AdminUser()):
     return get_tenant(user)
 
 
+# 查询当前企业的系统设置。
 @api.get('/api/settings')
 def get_settings(user=CurrentUser()):
     rows = db.query(select(db.TenantSetting.setting_key, db.TenantSetting.setting_value)
@@ -43,6 +46,7 @@ def get_settings(user=CurrentUser()):
     return result
 
 
+# 获取当前配置的问答与向量模型状态。
 @api.get('/api/models')
 def list_models(user=CurrentUser()):
     return {
@@ -53,6 +57,7 @@ def list_models(user=CurrentUser()):
     }
 
 
+# 更新当前企业允许修改的系统设置。
 @api.patch('/api/settings')
 def update_settings(req: SettingsUpdate, user=AdminUser()):
     allowed = {"language", "email_notifications", "embedding_model", "chat_model", "top_k", "security"}

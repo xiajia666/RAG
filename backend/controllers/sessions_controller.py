@@ -11,6 +11,7 @@ from controllers.common import get_kb_for_user
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from services import document_service
 
+# 获取会话详情和完整消息记录。
 @api.get('/api/sessions/{session_id}')
 def get_session(session_id: str, user=CurrentUser()):
     session = db.query_one(
@@ -35,6 +36,7 @@ def get_session(session_id: str, user=CurrentUser()):
     return session
 
 
+# 删除当前用户或管理员有权删除的会话。
 @api.delete('/api/sessions/{session_id}')
 def delete_session(session_id: str, user=CurrentUser()):
     if user["role"] == "admin":

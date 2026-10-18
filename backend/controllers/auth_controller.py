@@ -15,6 +15,7 @@ from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import LoginRequest, PasswordChange, RegisterRequest
 from services import document_service
 
+# 注册企业和首位管理员，并返回登录令牌。
 @api.post('/api/auth/register')
 def register(req: RegisterRequest):
     tenant_name = (req.tenant_name or "").strip()
@@ -43,6 +44,7 @@ def register(req: RegisterRequest):
     }
 
 
+# 校验企业代码、用户名和密码，返回登录令牌。
 @api.post('/api/auth/login')
 def login(req: LoginRequest, request):
     raw_username = (req.username or "").strip()
@@ -68,11 +70,13 @@ def login(req: LoginRequest, request):
     }
 
 
+# 获取当前登录用户的资料。
 @api.get('/api/auth/me')
 def me(user=CurrentUser()):
     return public_user(user["id"], user["tenant_id"])
 
 
+# 校验当前密码并修改密码，同时刷新登录令牌。
 @api.post('/api/auth/change-password')
 def change_password(req: PasswordChange, user=CurrentUser()):
     stored = db.query_one(select(db.User.password_hash).where(

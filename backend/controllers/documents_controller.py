@@ -12,6 +12,7 @@ from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import BulkDocumentDelete
 from services import document_service
 
+# 查询当前用户有权访问的全部文档。
 @api.get('/api/documents')
 def list_all_documents(user=CurrentUser()):
     visible = set(accessible_kb_ids(user))
@@ -23,6 +24,7 @@ def list_all_documents(user=CurrentUser()):
     ) if doc["kb_id"] in visible]
 
 
+# 预览文档信息及部分文本分块。
 @api.get('/api/documents/{doc_id}/preview')
 def preview_document(doc_id: str, user=CurrentUser()):
     doc = db.query_one(
@@ -42,6 +44,7 @@ def preview_document(doc_id: str, user=CurrentUser()):
     return {"document": doc, "chunks": chunks}
 
 
+# 下载文档的原始文件。
 @api.get('/api/documents/{doc_id}/file')
 def download_document(doc_id: str, user=CurrentUser()):
     doc = db.query_one(
@@ -61,6 +64,7 @@ def download_document(doc_id: str, user=CurrentUser()):
     return send_file(path, as_attachment=True, download_name=doc["filename"])
 
 
+# 批量删除有权管理的文档及原始文件。
 @api.post('/api/documents/bulk-delete')
 def bulk_delete_documents(req: BulkDocumentDelete, user=CurrentUser()):
     if len(req.document_ids) > 200:
@@ -80,6 +84,7 @@ def bulk_delete_documents(req: BulkDocumentDelete, user=CurrentUser()):
     return {"deleted_count": len(docs)}
 
 
+# 删除指定文档及其原始文件。
 @api.delete('/api/documents/{doc_id}')
 def delete_document(doc_id: str, user=CurrentUser()):
     doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))

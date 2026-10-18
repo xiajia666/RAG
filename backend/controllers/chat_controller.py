@@ -5,6 +5,7 @@ from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import ChatRequest
 from services import chat_service
 
+# 执行知识库检索问答，并以 SSE 流式返回结果和来源。
 @api.post('/api/chat/stream')
 def chat_stream(req: ChatRequest, user=CurrentUser()):
     query = req.message.strip()

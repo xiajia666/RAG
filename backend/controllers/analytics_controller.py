@@ -13,6 +13,7 @@ from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import *
 from services import document_service
 
+# 获取工作台统计、趋势及近期活动数据。
 @api.get('/api/dashboard')
 def dashboard(user=CurrentUser()):
     tenant_id = user["tenant_id"]
@@ -64,6 +65,7 @@ def dashboard(user=CurrentUser()):
     }
 
 
+# 获取企业问答趋势、活跃成员和热门问题统计。
 @api.get('/api/analytics')
 def analytics(user=CurrentUser()):
     tenant_id = user["tenant_id"]
