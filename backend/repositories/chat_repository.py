@@ -3,7 +3,7 @@ import json
 
 from sqlalchemy import insert, select
 
-import db
+from core import db
 
 
 def get_owned_session(session_id: str, tenant_id: str, user_id: str) -> dict | None:

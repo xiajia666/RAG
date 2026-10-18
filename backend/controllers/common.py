@@ -6,9 +6,8 @@ import unicodedata
 from flask import jsonify
 from sqlalchemy import and_, case, delete, distinct, func, insert, select, update
 
-import auth
-import config
-import db
+from security import authentication as auth
+from core import config, db
 from controllers.runtime import HTTPException
 
 

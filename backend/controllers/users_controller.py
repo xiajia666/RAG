@@ -3,10 +3,13 @@ import json, os, re, secrets, unicodedata, uuid
 from datetime import datetime, timedelta
 from flask import Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 from sqlalchemy import and_, case, delete, distinct, func, insert, select, update
-import auth, config, db, llm, vector_store
+from core import config, db
+from rag import llm
+from rag import vector_store
+from security import authentication as auth
 from controllers.common import *
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from schemas import *
+from core.schemas import *
 from services import document_service
 
 @api.get('/api/users')
@@ -118,4 +121,3 @@ def delete_user(user_id: str, user=AdminUser()):
                .values(status=0, deleted_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                        token_version=db.User.token_version + 1))
     return {"deleted": True}
-

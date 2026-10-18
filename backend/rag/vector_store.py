@@ -5,9 +5,8 @@ import uuid
 import numpy as np
 from sqlalchemy import insert, select, update
 
-import config
-import db
-import embeddings
+from core import config, db
+from rag import embeddings
 
 
 def split_text(text):

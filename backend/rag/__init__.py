@@ -1,1 +1,1 @@
-"""Web-framework-independent retrieval-augmented generation components."""
+"""RAG document ingestion, retrieval, and generation modules."""

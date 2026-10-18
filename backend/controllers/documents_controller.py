@@ -3,10 +3,13 @@ import json, os, re, secrets, unicodedata, uuid
 from datetime import datetime, timedelta
 from flask import Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 from sqlalchemy import and_, case, delete, distinct, func, insert, select, update
-import auth, config, db, llm, vector_store
+from core import config, db
+from rag import llm
+from rag import vector_store
+from security import authentication as auth
 from controllers.common import *
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from schemas import *
+from core.schemas import *
 from services import document_service
 
 @api.get('/api/documents')
@@ -86,4 +89,3 @@ def delete_document(doc_id: str, user=CurrentUser()):
     db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
     document_service.remove_original_file(user["tenant_id"], doc_id, doc["filename"])
     return {"deleted": True}
-

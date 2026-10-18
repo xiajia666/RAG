@@ -2,7 +2,7 @@
 from flask import Response, stream_with_context
 from controllers.common import *
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from schemas import ChatRequest
+from core.schemas import ChatRequest
 from services import chat_service
 
 @api.post('/api/chat/stream')

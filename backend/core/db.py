@@ -10,7 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-import config
+from core import config
 from models import (
     Base, ChatSession, Chunk, Document, KnowledgeBase, KnowledgeBaseAccess,
     KnowledgeBaseMember, Message, Tenant, TenantSetting, User,

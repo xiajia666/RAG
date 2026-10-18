@@ -3,10 +3,13 @@ import json, os, re, secrets, unicodedata, uuid
 from datetime import datetime, timedelta
 from flask import Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 from sqlalchemy import and_, case, delete, distinct, func, insert, select, update
-import auth, config, db, llm, vector_store
+from core import config, db
+from rag import llm
+from rag import vector_store
+from security import authentication as auth
 from controllers.common import *
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from schemas import *
+from core.schemas import *
 from services import document_service
 
 @api.post('/api/auth/register')
@@ -81,4 +84,3 @@ def change_password(req: PasswordChange, user=CurrentUser()):
                .values(password_hash=auth.hash_password(req.new_password), token_version=version,
                        updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     return {"token": auth.create_token(user["id"], user["tenant_id"], version)}
-

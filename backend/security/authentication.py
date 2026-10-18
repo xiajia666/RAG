@@ -7,8 +7,7 @@ from sqlalchemy import select
 from flask import request
 from werkzeug.exceptions import Forbidden, Unauthorized
 
-import config
-import db
+from core import config, db
 
 
 def hash_password(password: str) -> str:

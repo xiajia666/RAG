@@ -1,6 +1,6 @@
 """Create the RAG MySQL database and a least-privilege application account.
 
-Run from the project root with: python backend/provision_mysql.py
+Run from the backend directory with: python -m ops.provision_mysql
 The MySQL root password is requested with terminal echo disabled and is never saved.
 """
 import argparse
@@ -15,7 +15,8 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import SQLAlchemyError
 
-ROOT = Path(__file__).resolve().parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+ROOT = BACKEND_DIR.parent
 ENV_FILE = ROOT / ".env"
 DB_HOST = "123.57.80.38"
 DATABASE = "rag_db"
@@ -96,8 +97,8 @@ def main():
 
     # Importing db initializes all RAG tables via the application account.
     import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import db
+    sys.path.insert(0, str(BACKEND_DIR))
+    from core import db
 
     tables = inspect(db.engine).get_table_names()
     set_env_values(values)

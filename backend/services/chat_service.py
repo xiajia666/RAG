@@ -2,8 +2,8 @@
 import uuid
 from collections.abc import Iterator
 
-import llm
-import vector_store
+from rag import llm
+from rag import vector_store
 from rag.generation import build_messages
 from repositories import chat_repository
 

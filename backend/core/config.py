@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 # Backend source lives in backend/; keep the shared local configuration at the project root.
-BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 

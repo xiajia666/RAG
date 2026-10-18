@@ -5,7 +5,7 @@ import re
 from flask import Blueprint, request
 from pydantic import ValidationError
 
-import auth
+from security import authentication as auth
 
 
 class HTTPException(Exception):

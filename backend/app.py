@@ -3,7 +3,7 @@ import os
 from flask import Flask, abort, jsonify, send_file, send_from_directory
 from pydantic import ValidationError
 from werkzeug.exceptions import HTTPException as WerkzeugHTTPException
-import config
+from core import config
 from controllers.runtime import HTTPException, api
 
 import controllers.auth_controller  # noqa: F401

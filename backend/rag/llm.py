@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-import config
+from core import config
 
 _client = None
 

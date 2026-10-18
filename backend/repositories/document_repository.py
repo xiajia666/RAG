@@ -1,7 +1,7 @@
 """Document persistence operations."""
 from sqlalchemy import delete, insert, select
 
-import db
+from core import db
 
 
 def create_document(tenant_id: str, kb_id: str, doc_id: str, filename: str, size: int) -> None:

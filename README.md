@@ -26,11 +26,17 @@
 RAG/
 ├── backend/          # Python + Flask 后端
 │   ├── app.py        # Flask 应用工厂、错误处理、Blueprint 注册
+│   ├── core/         # 环境配置、数据库访问与请求校验
+│   │   ├── config.py
+│   │   ├── db.py
+│   │   └── schemas.py
 │   ├── controllers/  # 按业务域拆分的 HTTP 控制器
 │   ├── services/     # 文档入库、聊天等业务编排
 │   ├── repositories/ # 数据持久化访问
-│   ├── rag/          # 与 Web 框架无关的 RAG 组件
-│   ├── models.py     # SQLAlchemy 数据模型
+│   ├── models/       # SQLAlchemy 数据模型
+│   ├── rag/          # parsing、embeddings、vector_store、generation、llm
+│   ├── security/     # 认证与授权
+│   ├── ops/          # MySQL 初始化等运维命令
 │   ├── main.py       # Flask 本地开发入口
 │   ├── requirements.txt
 │   └── data/         # SQLite、上传文件和 JWT 密钥
@@ -85,15 +91,21 @@ Flask 应用使用工厂 `create_app()` 创建，并通过按业务域划分的 
 
 | 层 | 位置 | 职责 |
 |---|---|---|
-| Model | `backend/models.py` | SQLAlchemy 实体定义，保持现有表结构 |
+| Model | `backend/models/` | SQLAlchemy 实体定义，保持现有表结构 |
 | Controller | `backend/controllers/` | Flask Blueprint 路由、HTTP 参数/响应和认证入口 |
 | Service | `backend/services/` | 文档入库补偿、聊天会话与 RAG 流程编排 |
 | Repository | `backend/repositories/` | 文档、会话和消息的数据库访问 |
-| RAG | `backend/rag/`、`backend/vector_store.py`、`backend/embeddings.py`、`backend/llm.py` | 提示词/上下文组装、向量检索、Embedding 和模型调用 |
+| RAG | `backend/rag/` | 文档解析、Embedding、向量检索、提示词组装和模型调用 |
 
-控制器按认证、租户设置、知识库、文档、会话、用户、分析和聊天拆分；原 API 路径、Bearer JWT 认证及响应字段保持兼容。当前项目没有知识蒸馏、重排序或多源连接器实现，本次没有虚构这些能力；`db.py` 仍负责 SQLAlchemy 引擎、Session 辅助函数和现有事务操作。
+控制器按业务域拆分，原 API 路径、Bearer JWT 认证及响应字段保持兼容。项目尚未实现知识蒸馏、重排序或多源连接器，不为这些能力预建目录。
 
-MySQL 初始化和历史租户迁移 SQL 已集中在 `backend/mysql_all.sql`。新部署只需执行文件中的“新库初始化”部分；已经完成租户迁移的现有数据库无需重跑历史迁移部分。执行前，将初始化部分两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
+MySQL 初始化和历史租户迁移 SQL 已集中在 `backend/data/mysql/mysql_all.sql`。新部署只需执行文件中的“新库初始化”部分；已经完成租户迁移的现有数据库无需重跑历史迁移部分。执行前，将初始化部分两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
+
+运行 MySQL 初始化工具：
+
+```bash
+cd backend && python -m ops.provision_mysql
+```
 
 ```env
 DATABASE_BACKEND=mysql

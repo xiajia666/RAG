@@ -1,4 +1,4 @@
-from llm import chat_stream
+from rag.llm import chat_stream
 
 def main():
     print("deepseek 控制台对话，输入exit 退出")

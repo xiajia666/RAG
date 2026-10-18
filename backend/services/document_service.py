@@ -2,9 +2,9 @@
 import os
 import uuid
 
-import config
-import parsing
-import vector_store
+from core import config
+from rag import parsing
+from rag import vector_store
 from repositories import document_repository
 
 
