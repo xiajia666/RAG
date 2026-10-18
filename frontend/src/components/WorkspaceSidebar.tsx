@@ -55,7 +55,7 @@ export default function Sidebar({ current, onNavigate, collapsed, onToggle, user
         </div>
         {!collapsed && (
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
-            NeuralRAG
+            知微知识库
           </span>
         )}
         <button

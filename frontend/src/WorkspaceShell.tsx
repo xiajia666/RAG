@@ -36,7 +36,7 @@ export default function WorkspaceShell() {
       <main className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--color-bg)' }}>
         <header className="flex items-center justify-between px-6 py-3 shrink-0" style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', minHeight: 52 }}>
           <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-3)' }}>
-            <span>NeuralRAG</span><span aria-hidden="true">›</span><span style={{ color: 'var(--color-text-2)' }}>{title}</span>
+            <span>知微知识库</span><span aria-hidden="true">›</span><span style={{ color: 'var(--color-text-2)' }}>{title}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:block text-sm" style={{ color: 'var(--color-text-3)' }}>{user?.username}</div>
