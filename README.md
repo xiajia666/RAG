@@ -1,6 +1,6 @@
 # 小微企业 RAG 知识库
 
-专精于小微企业的多知识库 RAG 问答系统：**React 前端 + FastAPI 后端**，支持多知识库隔离、云端 Embedding 语义检索、多用户登录、流式问答。
+专精于小微企业的多知识库 RAG 问答系统：**React 前端 + Flask 后端**，支持多知识库隔离、云端 Embedding 语义检索、多用户登录、流式问答。
 
 ## 功能特性
 
@@ -17,16 +17,21 @@
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Python 3.11 · FastAPI · SQLAlchemy（MySQL / SQLite）· numpy · DeepSeek（问答）· 云端 Embedding（检索） |
+| 后端 | Python 3.11 · Flask · SQLAlchemy（MySQL / SQLite）· numpy · DeepSeek（问答）· 云端 Embedding（检索） |
 | 前端 | React 18 · TypeScript · Vite · Tailwind CSS 4 · react-router · react-markdown |
 
 ## 目录结构
 
 ```
 RAG/
-├── backend/          # Python + FastAPI 后端
-│   ├── app.py        # API 路由
-│   ├── main.py       # uvicorn 入口
+├── backend/          # Python + Flask 后端
+│   ├── app.py        # Flask 应用工厂、错误处理、Blueprint 注册
+│   ├── controllers/  # 按业务域拆分的 HTTP 控制器
+│   ├── services/     # 文档入库、聊天等业务编排
+│   ├── repositories/ # 数据持久化访问
+│   ├── rag/          # 与 Web 框架无关的 RAG 组件
+│   ├── models.py     # SQLAlchemy 数据模型
+│   ├── main.py       # Flask 本地开发入口
 │   ├── requirements.txt
 │   └── data/         # SQLite、上传文件和 JWT 密钥
 ├── frontend/         # React + TypeScript 前端（Vite）
@@ -69,10 +74,24 @@ PORT=8000
 ### 3. 启动后端
 
 ```bash
-python backend/main.py  # 生产模式，同时服务 API 与前端产物
-# 或开发模式：
-uvicorn app:app --reload --port 8000 --app-dir backend
+python backend/main.py  # 本地开发服务器，同时服务 API 与前端产物
+# 生产环境：
+gunicorn --chdir backend --workers 2 --bind 127.0.0.1:8000 app:app
 ```
+
+Flask 应用使用工厂 `create_app()` 创建，并通过按业务域划分的 Blueprint 注册 API。生产环境请由 Gunicorn 托管，再由 Nginx 反向代理；不要将 Flask 开发服务器用于生产。
+
+### 后端分层
+
+| 层 | 位置 | 职责 |
+|---|---|---|
+| Model | `backend/models.py` | SQLAlchemy 实体定义，保持现有表结构 |
+| Controller | `backend/controllers/` | Flask Blueprint 路由、HTTP 参数/响应和认证入口 |
+| Service | `backend/services/` | 文档入库补偿、聊天会话与 RAG 流程编排 |
+| Repository | `backend/repositories/` | 文档、会话和消息的数据库访问 |
+| RAG | `backend/rag/`、`backend/vector_store.py`、`backend/embeddings.py`、`backend/llm.py` | 提示词/上下文组装、向量检索、Embedding 和模型调用 |
+
+控制器按认证、租户设置、知识库、文档、会话、用户、分析和聊天拆分；原 API 路径、Bearer JWT 认证及响应字段保持兼容。当前项目没有知识蒸馏、重排序或多源连接器实现，本次没有虚构这些能力；`db.py` 仍负责 SQLAlchemy 引擎、Session 辅助函数和现有事务操作。
 
 MySQL 初始化和历史租户迁移 SQL 已集中在 `backend/mysql_all.sql`。新部署只需执行文件中的“新库初始化”部分；已经完成租户迁移的现有数据库无需重跑历史迁移部分。执行前，将初始化部分两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
 

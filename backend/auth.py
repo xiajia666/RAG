@@ -4,7 +4,8 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 from sqlalchemy import select
-from fastapi import Depends, Header, HTTPException
+from flask import request
+from werkzeug.exceptions import Forbidden, Unauthorized
 
 import config
 import db
@@ -39,9 +40,11 @@ def decode_token(token: str):
         return None
 
 
-def get_current_user(authorization: str = Header(default="")) -> dict:
+def get_current_user(authorization: str | None = None) -> dict:
+    if authorization is None:
+        authorization = request.headers.get("Authorization", "")
     if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="未登录")
+        raise Unauthorized("未登录")
     token = authorization[7:].strip()
     user_id = decode_token(token)
     try:
@@ -51,7 +54,7 @@ def get_current_user(authorization: str = Header(default="")) -> dict:
     except Exception:
         tenant_id = token_version = None
     if not user_id or not tenant_id or token_version is None:
-        raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+        raise Unauthorized("登录已过期，请重新登录")
     user = db.query_one(
         select(db.User)
         .join(db.Tenant, db.Tenant.id == db.User.tenant_id)
@@ -65,11 +68,11 @@ def get_current_user(authorization: str = Header(default="")) -> dict:
         )
     )
     if not user:
-        raise HTTPException(status_code=401, detail="用户不存在")
+        raise Unauthorized("用户不存在")
     return user
 
 
-def require_admin(user: dict = Depends(get_current_user)) -> dict:
+def require_admin(user: dict) -> dict:
     if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+        raise Forbidden("需要管理员权限")
     return user
