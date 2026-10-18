@@ -146,7 +146,6 @@ export default function Login() {
                 <span>团队知识共享</span>
               </div>
             </div>
-            <span className="login-version">WORKSPACE · 01</span>
           </div>
         </section>
 
