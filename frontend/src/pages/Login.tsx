@@ -81,8 +81,8 @@ export default function Login() {
 
           <div className="login-story-copy">
             <div className="login-eyebrow"><span /> PRIVATE KNOWLEDGE WORKSPACE</div>
-            <h1>让个人知识与团队资料，<br /><span>都能被快速检索。</span></h1>
-            <p>上传资料并通过提问查找内容；团队可以共享知识库、协作维护文档，回答附带来源，方便核对原文。</p>
+            <h1>让个人与团队知识，<br /><span>都能被快速检索。</span></h1>
+            <p><strong>别再翻文件找答案，让知识主动为你所用。</strong><br />个人资料，随时提问；团队知识，高效共享。每一次 AI 回答，都有原文出处，让答案有据可查，让知识值得信赖。</p>
           </div>
 
           <div className="login-visual">
