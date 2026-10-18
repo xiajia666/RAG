@@ -56,8 +56,8 @@ body { margin: 0; }
 .login-visual-caption { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; white-space: nowrap; color: #718499; font: 9px "JetBrains Mono", monospace; letter-spacing: .1em; }
 .login-live-dot { width: 5px; height: 5px; border-radius: 50%; background: #38e2c6; box-shadow: 0 0 8px #38e2c6; }
 .login-caption-line { width: 25px; height: 1px; background: rgba(93,233,213,.35); }
-.login-story-footer { display: flex; align-items: center; gap: 12px; color: #a1afbf; font-size: 12px; }
-.login-feature-list { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 12px; }
+.login-story-footer { display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; color: #a1afbf; font-size: 12px; }
+.login-feature-list { display: flex; flex-wrap: nowrap; align-items: center; gap: 0 12px; white-space: nowrap; }
 .login-feature { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .login-feature-icon { display: inline-grid; width: 20px; height: 20px; place-items: center; color: #56e6d0; }
 .login-feature-icon svg { display: block; width: 20px; height: 20px; }
@@ -111,6 +111,10 @@ body { margin: 0; }
   .login-story-copy { margin-top: 58px; }
   .login-story-copy h1 { font-size: 29px; }
   .login-visual { transform: translate(8px, -14px); }
+  .login-story-footer { gap: 0; font-size: 9px; }
+  .login-feature-list { gap: 0 6px; }
+  .login-feature { gap: 3px; }
+  .login-feature-icon, .login-feature-icon svg { width: 14px; height: 14px; }
   .login-feature-divider { display: none; }
   .login-version { display: none; }
 }
