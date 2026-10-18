@@ -62,7 +62,7 @@ def login(req: LoginRequest, request):
         raise HTTPException(401, "用户名或密码错误")
     last_login_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.execute(update(db.User).where(db.User.id == user["id"], db.User.tenant_id == user["tenant_id"])
-               .values(last_login_at=last_login_at, last_login_ip=request.client.host if request.client else None))
+               .values(last_login_at=last_login_at, last_login_ip=request.remote_addr))
     return {
         "token": auth.create_token(user["id"], user["tenant_id"], user["token_version"]),
         "tenant_code": tenant_code,
