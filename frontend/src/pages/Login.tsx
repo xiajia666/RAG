@@ -81,8 +81,13 @@ export default function Login() {
 
           <div className="login-story-copy">
             <div className="login-eyebrow"><span /> PRIVATE KNOWLEDGE WORKSPACE</div>
-            <h1>让个人与团队知识，<br /><span>都能被快速检索。</span></h1>
-            <p><strong>别再翻文件找答案，让知识主动为你所用。</strong><br />个人资料，随时提问；团队知识，高效共享。每一次 AI 回答，都有原文出处，让答案有据可查，让知识值得信赖。</p>
+            <h1>个人与团队知识，<br /><span>都能被快速检索。</span></h1>
+            <div className="story-description">
+              <p className="story-lead">
+                个人知识，<span className="text-highlight">快速检索</span>；
+                团队资料，<span className="text-highlight">随时共享</span>。
+              </p>
+            </div>
           </div>
 
           <div className="login-visual">
@@ -93,7 +98,54 @@ export default function Login() {
           </div>
 
           <div className="login-story-footer">
-            <span>语义检索</span><i /> <span>私有知识库</span><i /> <span>答案可溯源</span>
+            <div className="login-feature-list">
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    <path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z" stroke="currentColor" strokeWidth="1.3" />
+                  </svg>
+                </span>
+                <span>AI 智能问答</span>
+              </div>
+
+              <i className="login-feature-divider" />
+
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    <path d="M14 3.5v5h4M8 14l2.5 2.5L16 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span>原文可追溯</span>
+              </div>
+
+              <i className="login-feature-divider" />
+
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="m15.5 15.5 5 5M7.5 10.5h6M10.5 7.5v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <span>语义精准检索</span>
+              </div>
+
+              <i className="login-feature-divider" />
+
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M3.5 19v-1.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V19h-11Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    <path d="M16 5.5a3 3 0 0 1 0 5.8M17 13.5a4.5 4.5 0 0 1 3.5 4.4V19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <span>团队知识共享</span>
+              </div>
+            </div>
             <span className="login-version">WORKSPACE · 01</span>
           </div>
         </section>
