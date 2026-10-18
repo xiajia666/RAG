@@ -49,19 +49,19 @@ body { margin: 0; }
 .story-description { max-width: 385px; color: #8b9aad; font-size: 13px; line-height: 1.9; }
 .story-lead { margin: 0 0 5px; color: #dbe6ef; font-size: 14px; font-weight: 600; }
 .text-highlight { color: #56e6d0; font-weight: 650; white-space: nowrap; }
-.login-visual { flex: 1; min-height: 245px; position: relative; display: grid; place-items: center; margin: 13px 0 0; }
+.login-visual { flex: 1; min-height: 245px; position: relative; display: grid; place-items: center; margin: 13px 0 0; transform: translate(18px, -22px); }
 .login-graph { width: min(340px, 90%); overflow: visible; z-index: 1; filter: drop-shadow(0 0 18px rgba(0,229,200,.08)); }
 .login-orbit { position: absolute; width: 300px; height: 150px; border: 1px solid rgba(67,224,200,.08); border-radius: 50%; transform: rotate(-15deg); }
 .login-orbit-two { width: 360px; height: 186px; transform: rotate(15deg); border-color: rgba(67,224,200,.045); }
 .login-visual-caption { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; white-space: nowrap; color: #718499; font: 9px "JetBrains Mono", monospace; letter-spacing: .1em; }
 .login-live-dot { width: 5px; height: 5px; border-radius: 50%; background: #38e2c6; box-shadow: 0 0 8px #38e2c6; }
 .login-caption-line { width: 25px; height: 1px; background: rgba(93,233,213,.35); }
-.login-story-footer { display: flex; align-items: center; gap: 12px; color: #8291a2; font-size: 10px; }
-.login-feature-list { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 11px; }
-.login-feature { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.login-feature-icon { display: inline-grid; width: 16px; height: 16px; place-items: center; color: #56e6d0; }
-.login-feature-icon svg { display: block; width: 16px; height: 16px; }
-.login-feature-divider { width: 1px; height: 13px; background: rgba(130,145,162,.35); }
+.login-story-footer { display: flex; align-items: center; gap: 12px; color: #a1afbf; font-size: 12px; }
+.login-feature-list { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 12px; }
+.login-feature { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.login-feature-icon { display: inline-grid; width: 20px; height: 20px; place-items: center; color: #56e6d0; }
+.login-feature-icon svg { display: block; width: 20px; height: 20px; }
+.login-feature-divider { width: 1px; height: 17px; background: rgba(130,145,162,.4); }
 .login-version { margin-left: auto; color: #59697c; font: 9px "JetBrains Mono", monospace; letter-spacing: .08em; }
 .login-form-side { min-width: 0; padding: 34px 42px 25px; display: flex; flex-direction: column; background: radial-gradient(ellipse at 50% 0%, rgba(35,67,77,.12), transparent 48%), #0c131e; }
 .login-form-top { display: flex; align-items: center; justify-content: space-between; color: #8c9aab; font-size: 11px; }
@@ -110,6 +110,8 @@ body { margin: 0; }
   .login-form-side { padding: 30px 28px 24px; }
   .login-story-copy { margin-top: 58px; }
   .login-story-copy h1 { font-size: 29px; }
+  .login-visual { transform: translate(8px, -14px); }
+  .login-feature-divider { display: none; }
   .login-version { display: none; }
 }
 @media (max-width: 620px) {
