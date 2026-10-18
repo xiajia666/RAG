@@ -3,13 +3,16 @@ import json, os, re, secrets, unicodedata, uuid
 from datetime import datetime, timedelta
 from flask import Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 from sqlalchemy import and_, case, delete, distinct, func, insert, select, update
+
+from controllers.common import (
+    _normalize_tenant_code, _normalize_username, _validate_new_password, public_user,
+)
 from core import config, db
 from rag import llm
 from rag import vector_store
 from security import authentication as auth
-from controllers.common import *
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from core.schemas import *
+from core.schemas import LoginRequest, PasswordChange, RegisterRequest
 from services import document_service
 
 @api.post('/api/auth/register')

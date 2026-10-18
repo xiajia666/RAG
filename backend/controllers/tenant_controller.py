@@ -7,9 +7,8 @@ from core import config, db
 from rag import llm
 from rag import vector_store
 from security import authentication as auth
-from controllers.common import *
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from core.schemas import *
+from core.schemas import SettingsUpdate, TenantUpdate
 from services import document_service
 
 @api.get('/api/tenant')

@@ -1,6 +1,6 @@
 """HTTP endpoints for one business domain."""
 from flask import Response, stream_with_context
-from controllers.common import *
+from controllers.common import get_kb_for_user, sse_event
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
 from core.schemas import ChatRequest
 from services import chat_service
