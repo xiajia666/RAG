@@ -247,7 +247,7 @@ export default function App() {
               <path d="M8 2v1M8 13v1M2 8h1M13 8h1M4.22 4.22l.7.7M11.08 11.08l.7.7M11.08 4.22l-.7.7M4.22 11.08l-.7.7" stroke="#080c14" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
           </div>
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-text)', letterSpacing: '-0.02em' }}>NeuralRAG</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-text)', letterSpacing: '-0.02em' }}>Personal-RAG</span>
         </div>
 
         <div className="hidden md:flex items-center gap-8">
@@ -297,7 +297,7 @@ export default function App() {
             </h1>
 
             <p className="text-base leading-relaxed" style={{ color: 'var(--color-muted-2)', maxWidth: '480px' }}>
-              NeuralRAG 将分散的文档转化为可查询的语义知识网络。接入你的数据源，10 分钟内部署企业级 RAG 问答系统。
+              Personal-RAG 将分散的文档转化为可查询的语义知识网络。接入你的数据源，10 分钟内部署企业级 RAG 问答系统。
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -458,7 +458,7 @@ export default function App() {
             让知识真正<br/>为你所用
           </h2>
           <p className="text-sm mb-8 leading-relaxed" style={{ color: 'var(--color-muted-2)' }}>
-            加入 500+ 家企业，用 NeuralRAG 将沉睡文档转化为即时智能。无需 ML 背景，今天就可以上线。
+            加入 500+ 家企业，用 Personal-RAG 将沉睡文档转化为即时智能。无需 ML 背景，今天就可以上线。
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button className="px-8 py-3.5 rounded-xl font-semibold text-sm" style={{ background: 'var(--color-cyan)', color: '#080c14', fontFamily: 'var(--font-display)' }}>
@@ -478,14 +478,14 @@ export default function App() {
             <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: 'var(--color-cyan)' }}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" fill="#080c14"/><path d="M8 2v1M8 13v1M2 8h1M13 8h1" stroke="#080c14" strokeWidth="1.2" strokeLinecap="round"/></svg>
             </div>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem' }}>NeuralRAG</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem' }}>Personal-RAG</span>
           </div>
           <div className="flex flex-wrap gap-6 text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'var(--font-body)' }}>
             {['隐私政策', '服务条款', '文档中心', 'GitHub', '联系我们'].map(l => (
               <a key={l} href="#" className="transition-colors hover:text-current">{l}</a>
             ))}
           </div>
-          <div className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>© 2026 NeuralRAG Inc.</div>
+          <div className="text-xs" style={{ color: 'var(--color-muted)', fontFamily: 'var(--font-mono)' }}>© 2026 Personal-RAG Inc.</div>
         </div>
       </footer>
 
