@@ -38,7 +38,7 @@ export default function Sidebar(props: Props) {
     <aside className={`sidebar ${props.mobileOpen ? '' : 'hidden'}`}>
       <div className="sidebar-header">
         <span className="sidebar-brand">
-          <span className="dot">●</span>小微企业知识库
+          <span className="dot">●</span>知微知识库
         </span>
         <div className="sidebar-user">
           <span className="name">{props.username}</span>

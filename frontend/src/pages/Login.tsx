@@ -74,15 +74,20 @@ export default function Login() {
     <main className="login-page">
       <div className="login-frame">
         <section className="login-story" aria-label="产品介绍">
-          <a className="login-brand" href="#/login" aria-label="个人知识库首页">
+          <a className="login-brand" href="#/login" aria-label="知微知识库首页">
             <BrandMark />
-            <span>知微个人知识库<span className="login-brand-light">·知识库</span></span>
+            <span>知微<span className="login-brand-light">·知识库</span></span>
           </a>
 
           <div className="login-story-copy">
             <div className="login-eyebrow"><span /> PRIVATE KNOWLEDGE WORKSPACE</div>
-            <h1>让每一份知识，<br /><span>都能被准确找到。</span></h1>
-            <p>汇集团队文档，构建专属知识空间。每个答案都有来源，每次检索都更进一步。</p>
+            <h1>个人与团队知识，<br /><span>都能被快速检索。</span></h1>
+            <div className="story-description">
+              <p className="story-lead">
+                个人知识，<span className="text-highlight">快速检索</span>；
+                团队资料，<span className="text-highlight">随时共享</span>。
+              </p>
+            </div>
           </div>
 
           <div className="login-visual">
@@ -93,8 +98,54 @@ export default function Login() {
           </div>
 
           <div className="login-story-footer">
-            <span>语义检索</span><i /> <span>私有知识库</span><i /> <span>答案可溯源</span>
-            <span className="login-version">WORKSPACE · 01</span>
+            <div className="login-feature-list">
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    <path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z" stroke="currentColor" strokeWidth="1.3" />
+                  </svg>
+                </span>
+                <span>AI 智能问答</span>
+              </div>
+
+              <i className="login-feature-divider" />
+
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    <path d="M14 3.5v5h4M8 14l2.5 2.5L16 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span>原文可追溯</span>
+              </div>
+
+              <i className="login-feature-divider" />
+
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="m15.5 15.5 5 5M7.5 10.5h6M10.5 7.5v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <span>语义精准检索</span>
+              </div>
+
+              <i className="login-feature-divider" />
+
+              <div className="login-feature">
+                <span className="login-feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M3.5 19v-1.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V19h-11Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    <path d="M16 5.5a3 3 0 0 1 0 5.8M17 13.5a4.5 4.5 0 0 1 3.5 4.4V19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <span>团队知识共享</span>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -105,7 +156,7 @@ export default function Login() {
             <div className="login-mobile-brand"><BrandMark /><span>知微·知识库</span></div>
             <div className="login-heading-kicker">WELCOME BACK</div>
             <h2>{mode === 'login' ? '欢迎回来' : '创建你的账号'}</h2>
-            <p className="login-form-subtitle">{mode === 'login' ? '登录以继续访问你的知识空间。' : '建立账号，开始整理和探索团队知识。'}</p>
+            <p className="login-form-subtitle">{mode === 'login' ? '登录以继续访问你的知识空间。' : '创建个人或团队空间，开始整理资料并基于文档提问。'}</p>
 
             <div className="login-mode-tabs" role="tablist" aria-label="账户操作">
               <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>登录</button>
@@ -114,11 +165,11 @@ export default function Login() {
 
             <form className="login-form" onSubmit={submit}>
               {mode === 'register' && <>
-                <label htmlFor="tenant-name">企业名称</label>
-                <div className="login-input-wrap"><input id="tenant-name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} placeholder="例如：知微科技" maxLength={128} /></div>
+                <label htmlFor="tenant-name">空间名称</label>
+                <div className="login-input-wrap"><input id="tenant-name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} placeholder="例如：我的知识空间 / 知微团队" maxLength={128} /></div>
               </>}
-              <label htmlFor="tenant-code">企业代码 <span className="login-field-hint">登录时使用</span></label>
-              <div className="login-input-wrap"><input id="tenant-code" value={tenantCode} onChange={(e) => setTenantCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="例如：zhiwei-tech" autoComplete="organization" maxLength={64} /></div>
+              <label htmlFor="tenant-code">空间代码 <span className="login-field-hint">个人或团队成员登录时使用</span></label>
+              <div className="login-input-wrap"><input id="tenant-code" value={tenantCode} onChange={(e) => setTenantCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="例如：my-knowledge" autoComplete="organization" maxLength={64} /></div>
 
               <label htmlFor="login-username">用户名 {mode === 'register' && <span className="login-field-hint">3–32 个字符</span>}</label>
               <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.5" r="3" stroke="currentColor" strokeWidth="1.4" /><path d="M4 16c.5-2.5 2.5-4 6-4s5.5 1.5 6 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg><input id="login-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="输入用户名" autoComplete="username" autoFocus maxLength={mode === 'register' ? 32 : undefined} /></div>

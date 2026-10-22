@@ -1,11 +1,11 @@
 # 小微企业 RAG 知识库
 
-专精于小微企业的多知识库 RAG 问答系统：**React 前端 + FastAPI 后端**，支持多知识库隔离、云端 Embedding 语义检索、多用户登录、流式问答。
+专精于小微企业的多知识库 RAG 问答系统：**React 前端 + Flask 后端**，支持多知识库隔离、云端 Embedding 语义检索、多用户登录、流式问答。
 
 ## 功能特性
 
 - **多知识库**：按业务场景拆分（合同 / 财务 / 产品手册 / 售后话术 / 政策…），各库独立上传文档、独立检索问答。
-- **语义检索**：上传后自动解析、按字符分块并保留重叠上下文，调用云端 Embedding 后分批写入 Qdrant；查询只编码 query，并由 Qdrant 完成余弦相似度检索。
+- **语义检索**：云端 Embedding 向量检索（非关键词匹配），上传时批量编码入库，查询只编码 query。
 - **企业多租户**：用户、知识库、文档和会话按租户隔离；知识库可设为企业共享或指定成员访问。
 - **团队权限**：管理员、编辑、只读三种企业角色；管理员可以为每个知识库再指定编辑/只读成员。
 - **产品工作台**：仪表盘、知识库向导、智能问答、文档管理、数据分析、团队管理和设置均接入后端数据。
@@ -17,16 +17,27 @@
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Python 3.11 · FastAPI · SQLAlchemy（MySQL / SQLite）· Qdrant · numpy · DeepSeek（问答）· 云端 Embedding（检索） |
+| 后端 | Python 3.11 · Flask · SQLAlchemy（MySQL / SQLite）· numpy · DeepSeek（问答）· 云端 Embedding（检索） |
 | 前端 | React 18 · TypeScript · Vite · Tailwind CSS 4 · react-router · react-markdown |
 
 ## 目录结构
 
 ```
 RAG/
-├── backend/          # Python + FastAPI 后端
-│   ├── app.py        # API 路由
-│   ├── main.py       # uvicorn 入口
+├── backend/          # Python + Flask 后端
+│   ├── app.py        # Flask 应用工厂、错误处理、Blueprint 注册
+│   ├── core/         # 环境配置、数据库访问与请求校验
+│   │   ├── config.py
+│   │   ├── db.py
+│   │   └── schemas.py
+│   ├── controllers/  # 按业务域拆分的 HTTP 控制器
+│   ├── services/     # 文档入库、聊天等业务编排
+│   ├── repositories/ # 数据持久化访问
+│   ├── models/       # SQLAlchemy 数据模型
+│   ├── rag/          # parsing、embeddings、vector_store、generation、llm
+│   ├── security/     # 认证与授权
+│   ├── ops/          # MySQL 初始化等运维命令
+│   ├── main.py       # Flask 本地开发入口
 │   ├── requirements.txt
 │   └── data/         # SQLite、上传文件和 JWT 密钥
 ├── frontend/         # React + TypeScript 前端（Vite）
@@ -47,8 +58,6 @@ pip install -r backend/requirements.txt
 
 ### 2. 配置 `.env`
 
-可复制项目根目录的 `.env.example` 为 `.env`，然后填写实际配置：
-
 ```env
 # 问答模型（DeepSeek，OpenAI 兼容协议）
 DEEPSEEK_API_KEY=sk-xxx
@@ -58,17 +67,6 @@ DEEPSEEK_MODEL=deepseek-chat
 EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
 EMBEDDING_API_KEY=sk-xxx
 EMBEDDING_MODEL=BAAI/bge-m3
-
-# Qdrant HTTP 服务；启用认证时填写与服务端一致的 API Key
-QDRANT_URL=http://127.0.0.1:6333
-QDRANT_API_KEY=
-QDRANT_COLLECTION=rag_chunks
-QDRANT_TIMEOUT=30
-QDRANT_BATCH_SIZE=64
-
-# 字符数（不是 token 数），须满足 0 <= CHUNK_OVERLAP < CHUNK_SIZE
-CHUNK_SIZE=400
-CHUNK_OVERLAP=100
 
 # JWT 密钥（留空则自动生成并持久化到 backend/data/.jwt_secret）
 JWT_SECRET=
@@ -81,24 +79,33 @@ PORT=8000
 
 ### 3. 启动后端
 
-先启动 Qdrant。本地开发示例（需要 Docker，数据保存在命名卷中）：
-
 ```bash
-docker run -d --name rag-qdrant --restart unless-stopped \
-  -p 127.0.0.1:6333:6333 \
-  -v rag_qdrant_data:/qdrant/storage \
-  qdrant/qdrant:latest
+python backend/main.py  # 本地开发服务器，同时服务 API 与前端产物
+# 生产环境：
+gunicorn --chdir backend --workers 2 --bind 127.0.0.1:8000 app:app
 ```
 
-也可连接已有 Qdrant（服务端需 1.12 或更新版本），将 `QDRANT_URL` 和 `QDRANT_API_KEY` 指向该实例。首次上传自动按 Embedding 返回的维度创建集合及过滤字段索引；已存在的集合必须使用相同维度和 Cosine 距离，否则上传会明确报错。连接容器或远程服务时，URL 应使用后端能访问的服务地址。
+Flask 应用使用工厂 `create_app()` 创建，并通过按业务域划分的 Blueprint 注册 API。生产环境请由 Gunicorn 托管，再由 Nginx 反向代理；不要将 Flask 开发服务器用于生产。
+
+### 后端分层
+
+| 层 | 位置 | 职责 |
+|---|---|---|
+| Model | `backend/models/` | SQLAlchemy 实体定义，保持现有表结构 |
+| Controller | `backend/controllers/` | Flask Blueprint 路由、HTTP 参数/响应和认证入口 |
+| Service | `backend/services/` | 文档入库补偿、聊天会话与 RAG 流程编排 |
+| Repository | `backend/repositories/` | 文档、会话和消息的数据库访问 |
+| RAG | `backend/rag/` | 文档解析、Embedding、向量检索、提示词组装和模型调用 |
+
+控制器按业务域拆分，原 API 路径、Bearer JWT 认证及响应字段保持兼容。项目尚未实现知识蒸馏、重排序或多源连接器，不为这些能力预建目录。
+
+MySQL 初始化和历史租户迁移 SQL 已集中在 `backend/data/mysql/mysql_all.sql`。新部署只需执行文件中的“新库初始化”部分；已经完成租户迁移的现有数据库无需重跑历史迁移部分。执行前，将初始化部分两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
+
+运行 MySQL 初始化工具：
 
 ```bash
-python backend/main.py  # 生产模式，同时服务 API 与前端产物
-# 或开发模式：
-uvicorn app:app --reload --port 8000 --app-dir backend
+cd backend && python -m ops.provision_mysql
 ```
-
-MySQL 初始化和历史租户迁移 SQL 已集中在 `backend/mysql_all.sql`。新部署只需执行文件中的“新库初始化”部分；已经完成租户迁移的现有数据库无需重跑历史迁移部分。执行前，将初始化部分两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
 
 ```env
 DATABASE_BACKEND=mysql
@@ -129,7 +136,7 @@ npm run build          # 构建到 frontend/dist，由后端静态托管
 
 1. 打开应用 → 注册首个账号（自动成为**管理员**）。
 2. 管理员新建知识库（如「员工手册」）。
-3. 在「文档管理」中上传 PDF / DOCX / txt / md 等文档（自动解析、分块、向量化并写入 Qdrant，完成后才返回成功）。扫描版 PDF 需先进行 OCR。
+3. 在「文档管理」中上传 PDF / Word / txt / md 等文档（自动解析、分块、向量化）。
 4. 在知识库内直接提问，回答会附带来源文档与相关度。
 5. 管理员在「用户管理」中为员工创建账号（角色：成员）。
 
@@ -143,37 +150,8 @@ npm run build          # 构建到 frontend/dist，由后端静态托管
 
 知识库默认企业内共享。管理员可在知识库详情中切换为指定成员访问，并分别授予编辑或只读权限。会话按用户隔离。
 
-## 文档索引与存储
-
-- 原始文件保存在 `backend/data/documents/<tenant_id>/`，SQL 保留文档记录和切片文本，供列表、下载、切片预览使用。新增切片的 `embedding` SQL 字段留空，兼容原有表结构，无需修改现有表。
-- 每个 Qdrant point 保存向量，以及 `tenant_id`、`kb_id`、`doc_id`、`filename`、`chunk_index`、`content`、`created_at`、`embedding_model`。检索按租户、知识库和模型过滤，再核对已提交的 SQL 切片。
-- Qdrant 批次写入使用 `wait=True`，完成后在同一 SQL 事务中保存切片和数量。失败时回滚 SQL、清理原文件并尝试删除已写入的向量；如果 Qdrant 同时不可用，清理错误会记录日志，残留向量不会被查询返回。恢复服务后可按日志中的租户、知识库和文档 ID 清理残留点。
-- 单篇、批量和整库删除都会先清理对应 Qdrant 索引，向量服务失败时返回 503，保留尚未删除的业务记录供重试。
-
-### 已有 SQL 文档迁移 / 索引重建
-
-旧版本存于 SQL 的向量不会自动出现在 Qdrant 中。配置好 Embedding 和 Qdrant 后，在项目根目录执行：
-
-```bash
-python backend/reindex_qdrant.py --tenant-id <租户ID>
-# 也可只重建一个知识库：
-python backend/reindex_qdrant.py --tenant-id <租户ID> --kb-id <知识库ID>
-```
-
-脚本使用已保存的切片文本重新调用 Embedding（会产生供应商费用），保留原文档、切片 ID、预览和会话。相同 point ID 会被覆盖，失败后可重跑。切换模型时建议使用新的 `QDRANT_COLLECTION` 并对所有需要查询的租户重建索引；修改分块参数仅对新上传文档生效。
-
-## 后端测试
-
-```bash
-pip install -r backend/requirements-dev.txt
-python -m pytest backend/tests -q
-```
-
-测试使用临时 SQLite、Qdrant 客户端的本地内存引擎和模拟 Embedding 响应，不依赖在线模型或生产数据库，覆盖上传分块、检索隔离、删除、迁移和失败补偿。Qdrant 接口用法参考[官方 Points 文档](https://qdrant.tech/documentation/manage-data/points/)和[多租户过滤文档](https://qdrant.tech/documentation/tutorials/multiple-partitions/)。
-
 ## 常见问题
 
 - **上传报「EMBEDDING_API_KEY 未配置」**：`.env` 中未填向量供应商的 key（DeepSeek 不提供 embedding）。
-- **无法连接 Qdrant / 401**：检查 `QDRANT_URL` 是否为 HTTP API 地址（通常端口 6333），以及 `QDRANT_API_KEY` 是否与服务端一致。
-- **想换检索供应商**：修改 `EMBEDDING_*`、配置新的 `QDRANT_COLLECTION`，再运行上面的重建脚本，无需删除业务数据库。
+- **想换检索供应商**：改 `.env` 里 `EMBEDDING_*` 三项即可；换模型后需删除 `backend/data/app.db` 重新上传文档以重建向量。
 - **端口**：生产可改回 80（需 root）；本地开发建议 8000。

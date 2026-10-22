@@ -1,6 +1,5 @@
-fastapi>=0.110
-uvicorn[standard]>=0.29
-python-multipart>=0.0.9
+Flask>=3.0
+gunicorn>=22.0
 openai>=1.50
 numpy>=1.26
 PyJWT>=2.8

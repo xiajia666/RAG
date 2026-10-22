@@ -40,7 +40,7 @@ export default function App() {
         {/* Top bar */}
         <header className="flex items-center justify-between px-6 py-3 shrink-0" style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', minHeight: 52 }}>
           <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-3)' }}>
-            <span>NeuralRAG</span>
+            <span>Personal-RAG</span>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
             <span style={{ color: 'var(--color-text-2)' }}>{pageTitle(page)}</span>
           </div>

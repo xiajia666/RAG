@@ -21,7 +21,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: string) =
     { label: '知识库总数', value: data.stats.knowledge_bases, color: 'var(--color-cyan)', icon: '▤' },
     { label: '文档总量', value: data.stats.documents, color: 'var(--color-blue)', icon: '▧' },
     { label: '本月问答次数', value: data.stats.queries_this_month, color: 'var(--color-violet)', icon: '◌' },
-    { label: '团队成员', value: data.stats.members, color: 'var(--color-green)', icon: '♙' },
+    { label: '空间成员', value: data.stats.members, color: 'var(--color-green)', icon: '♙' },
   ]
   const actions = [
     { label: '新建知识库', target: 'kbs/new', icon: '+', color: 'var(--color-cyan)' },
@@ -32,7 +32,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: string) =
   return (
     <div className="flex-1 overflow-y-auto animate-fade-in" style={{ padding: '24px 28px' }}>
       <div className="flex items-start justify-between mb-8">
-        <div><h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.5rem' }}>你好，{user?.nickname || user?.username} 👋</h1><p className="text-sm mt-1" style={{ color: 'var(--color-text-2)' }}>这是你的企业知识库概览</p></div>
+        <div><h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.5rem' }}>你好，{user?.nickname || user?.username} 👋</h1><p className="text-sm mt-1" style={{ color: 'var(--color-text-2)' }}>个人资料与团队知识空间，一站管理</p></div>
         <button onClick={() => onNavigate('kbs/new')} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'var(--color-cyan)', color: 'var(--color-text-inv)' }}>＋ 新建知识库</button>
       </div>
       {error && <div className="mb-4 text-sm" style={{ color: 'var(--color-red)' }}>{error}</div>}
