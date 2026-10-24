@@ -33,6 +33,8 @@ export interface ChunkingStrategy {
   separators: string[]
 }
 
+export type ChunkMethod = 'general' | 'qa' | 'table' | 'paper' | 'book' | 'manual' | 'laws' | 'presentation' | 'email' | 'one'
+
 export interface ChunkAnalysis {
   analysis_id: string
   filename: string
@@ -71,19 +73,22 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
   return res.json() as Promise<T>
 }
 
-export async function analyzeDocument(kbId: string, file: File): Promise<ChunkAnalysis> {
+export async function analyzeDocument(kbId: string, file: File, chunkMethod: ChunkMethod): Promise<ChunkAnalysis> {
   const form = new FormData()
   form.append('file', file)
+  form.append('chunk_method', chunkMethod)
   return postForm(`/api/kbs/${kbId}/documents/analyze`, form)
 }
 
 export async function previewDocumentChunks(
   kbId: string,
   analysisId: string,
+  chunkMethod: ChunkMethod,
   chunkingStrategy: ChunkingStrategy,
 ): Promise<ChunkPreview> {
   return api.post<ChunkPreview>(`/api/kbs/${kbId}/documents/analyze/preview`, {
     analysis_id: analysisId,
+    chunk_method: chunkMethod,
     chunking_strategy: chunkingStrategy,
   })
 }
@@ -131,10 +136,12 @@ export const api = {
 export async function confirmAnalyzedDocument(
   kbId: string,
   analysisId: string,
+  chunkMethod: ChunkMethod,
   chunkingStrategy: ChunkingStrategy,
 ): Promise<{ document: Document; chunk_count: number }> {
   return api.post<{ document: Document; chunk_count: number }>(`/api/kbs/${kbId}/documents/confirm`, {
     analysis_id: analysisId,
+    chunk_method: chunkMethod,
     chunking_strategy: chunkingStrategy,
   })
 }

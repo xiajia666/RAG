@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { analyzeDocument, confirmAnalyzedDocument, previewDocumentChunks, uploadDocument } from '../api/client'
-import type { ChunkAnalysis, ChunkPreview, ChunkingStrategy } from '../api/client'
+import type { ChunkAnalysis, ChunkMethod, ChunkPreview, ChunkingStrategy } from '../api/client'
 
 interface Props {
   kbId: string
@@ -10,6 +10,19 @@ interface Props {
 }
 
 type Phase = 'choice' | 'analyzing' | 'previewing' | 'ready' | 'uploading' | 'error'
+
+const CHUNK_METHODS: { id: ChunkMethod; name: string; description: string; fit: string }[] = [
+  { id: 'general', name: '通用文本', description: '按长度与自然段切分，保留上下文重叠。', fit: '普通 PDF、Word、说明文档' },
+  { id: 'qa', name: '问答对', description: '将问题与对应答案作为完整知识单元。', fit: 'FAQ、客服问答、题库' },
+  { id: 'table', name: '表格数据', description: '优先保留表头与行列关系，避免拆散记录。', fit: '表格、清单、结构化数据' },
+  { id: 'paper', name: '学术论文', description: '围绕摘要、章节、结论等论文结构组织内容。', fit: '研究论文、技术报告' },
+  { id: 'book', name: '书籍章节', description: '按章节与小节组织较长内容，保留层级脉络。', fit: '书籍、长篇资料、教材' },
+  { id: 'manual', name: '操作手册', description: '尽量保持操作步骤、注意事项和前置条件完整。', fit: '产品手册、SOP、运维指南' },
+  { id: 'laws', name: '法规条文', description: '按章、节、条款边界切分，保留条款编号。', fit: '法律法规、制度、合同条款' },
+  { id: 'presentation', name: '演示文稿', description: '按页面主题组织内容，保留页内要点关系。', fit: 'PPT 转 PDF、演讲材料' },
+  { id: 'email', name: '邮件内容', description: '按邮件或往来消息分组，保留主题与上下文。', fit: '邮件导出、沟通记录' },
+  { id: 'one', name: '整篇文档', description: '整份短文作为一个知识块，不进行细分。', fit: '短文本、单页说明' },
+]
 
 const inputStyle = {
   background: 'var(--color-surface-2)',
@@ -21,6 +34,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
   const [fileIndex, setFileIndex] = useState(0)
   const [phase, setPhase] = useState<Phase>('choice')
   const [preAnalyze, setPreAnalyze] = useState(false)
+  const [chunkMethod, setChunkMethod] = useState<ChunkMethod>('general')
   const [analysis, setAnalysis] = useState<ChunkAnalysis | null>(null)
   const [preview, setPreview] = useState<ChunkPreview | null>(null)
   const [previewedStrategy, setPreviewedStrategy] = useState('')
@@ -39,6 +53,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setFileIndex(index => index + 1)
     setPhase('choice')
     setPreAnalyze(false)
+    setChunkMethod('general')
     setAnalysis(null)
     setPreview(null)
     setPreviewedStrategy('')
@@ -60,7 +75,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setPhase('analyzing')
     setError('')
     try {
-      const result = await analyzeDocument(kbId, file)
+      const result = await analyzeDocument(kbId, file, chunkMethod)
       setAnalysis(result)
       setPreview({ estimated_chunk_count: result.estimated_chunk_count, preview: result.preview, warnings: result.warnings })
       setPreviewedStrategy(JSON.stringify(result.strategy))
@@ -92,6 +107,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
   function returnToChoice() {
     setPhase('choice')
     setPreAnalyze(false)
+    setChunkMethod('general')
     setAnalysis(null)
     setPreview(null)
     setPreviewedStrategy('')
@@ -106,7 +122,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setError('')
     try {
       if (!analysis?.analysis_id) throw new Error('分析结果缺少临时任务编号，请重新分析')
-      await confirmAnalyzedDocument(kbId, analysis.analysis_id, strategy)
+      await confirmAnalyzedDocument(kbId, analysis.analysis_id, chunkMethod, strategy)
       if (isLast) await finish()
       else advanceToNext()
     } catch (reason) {
@@ -120,7 +136,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setPhase('previewing')
     setPreviewError('')
     try {
-      const result = await previewDocumentChunks(kbId, analysis.analysis_id, strategy)
+      const result = await previewDocumentChunks(kbId, analysis.analysis_id, chunkMethod, strategy)
       setPreview(result)
       setPreviewedStrategy(JSON.stringify(strategy))
       setPhase('ready')
@@ -147,14 +163,14 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
       <header className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: 'var(--color-border)' }}>
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2 text-xs" style={{ color: 'var(--color-cyan)' }}><span className="h-2 w-2 rounded-full" style={{ background: 'var(--color-cyan)' }} />DOCUMENT UPLOAD <span style={{ color: 'var(--color-text-3)' }}>· {fileIndex + 1} / {files.length}</span></div>
-          <h2 id="chunking-flow-title" className="text-lg font-semibold">上传前设置</h2>
+          <h2 id="chunking-flow-title" className="text-lg font-semibold">文档设置</h2>
           <p className="mt-1 max-w-3xl truncate text-sm" style={{ color: 'var(--color-text-3)' }} title={file.name}>{file.name} · {formatSize(file.size)}</p>
         </div>
         <button type="button" disabled={busy} onClick={onClose} className="rounded-lg px-3 py-1 text-sm" style={{ color: 'var(--color-text-2)', border: '1px solid var(--color-border)', opacity: busy ? .5 : 1 }}>关闭</button>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {phase === 'choice' && <div className="mx-auto flex min-h-64 max-w-xl flex-col justify-center"><div className="mb-5 text-center"><div className="mb-3 text-4xl" style={{ color: 'var(--color-cyan)' }}>▤</div><h3 className="font-semibold">为这份文件选择上传方式</h3><p className="mt-2 text-sm" style={{ color: 'var(--color-text-3)' }}>此选项仅对当前文件生效；队列中的每份文件都会单独确认。</p></div><label className="flex cursor-pointer items-start gap-3 rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><input type="checkbox" checked={preAnalyze} onChange={event => setPreAnalyze(event.target.checked)} className="mt-1" /><span><span className="block text-sm font-medium">上传前使用 AI 预分析切块策略</span><span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>勾选后会先分析文档、推荐参数并预览切片；不勾选则直接按原有流程上传。</span></span></label></div>}
+        {phase === 'choice' && <div className="mx-auto max-w-4xl py-2"><div className="mb-5 text-center"><div className="mb-3 text-4xl" style={{ color: 'var(--color-cyan)' }}>▤</div><h3 className="font-semibold">为这份文件选择上传方式</h3><p className="mt-2 text-sm" style={{ color: 'var(--color-text-3)' }}>每份文件分别设置；下一份文件会重新询问。</p></div><label className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><input type="checkbox" checked={preAnalyze} onChange={event => setPreAnalyze(event.target.checked)} className="mt-1" /><span><span className="block text-sm font-medium">上传前使用 AI 预分析切块策略</span><span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>勾选后可选择内容模板，AI 将结合文档结构推荐参数并生成切片预览；不勾选则直接按原有流程上传。</span></span></label><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-medium">选择内容类型模板</h4><span className="text-xs" style={{ color: preAnalyze ? 'var(--color-cyan)' : 'var(--color-text-3)' }}>{preAnalyze ? '将用于本文件的 AI 预分析' : '开启预分析后可选择'}</span></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{CHUNK_METHODS.map(method => { const active = chunkMethod === method.id; return <button key={method.id} type="button" disabled={!preAnalyze} onClick={() => setChunkMethod(method.id)} className="rounded-xl p-3 text-left transition-colors" style={{ background: active ? 'var(--color-cyan-dim)' : 'var(--color-surface-2)', border: `1px solid ${active && preAnalyze ? 'var(--color-cyan)' : 'var(--color-border)'}`, opacity: preAnalyze ? 1 : .58, cursor: preAnalyze ? 'pointer' : 'not-allowed' }}><span className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{method.name}</span>{active && <span className="text-xs" style={{ color: 'var(--color-cyan)' }}>已选</span>}</span><span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-2)' }}>{method.description}</span><span className="mt-2 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>适用：{method.fit}</span></button> })}</div><p className="mt-3 text-[11px] leading-5" style={{ color: 'var(--color-text-3)' }}>模板参考 RAGFlow 常见解析方式。实际分块效果取决于文档格式与后端解析能力。</p></div>}
 
         {phase === 'analyzing' && <div className="flex min-h-64 flex-col items-center justify-center text-center"><span className="mb-4 h-9 w-9 animate-spin rounded-full border-2 border-current border-r-transparent" style={{ color: 'var(--color-cyan)' }} /><h3 className="font-medium">正在分析文档结构</h3><p className="mt-2 max-w-md text-sm" style={{ color: 'var(--color-text-3)' }}>AI 正在识别文档类型、内容层次和合适的切块方式。分析完成前不会开始正式入库。</p></div>}
 
