@@ -170,7 +170,44 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {phase === 'choice' && <div className="mx-auto max-w-4xl py-2"><div className="mb-5 text-center"><div className="mb-3 text-4xl" style={{ color: 'var(--color-cyan)' }}>▤</div><h3 className="font-semibold">为这份文件选择上传方式</h3><p className="mt-2 text-sm" style={{ color: 'var(--color-text-3)' }}>每份文件分别设置；下一份文件会重新询问。</p></div><label className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><input type="checkbox" checked={preAnalyze} onChange={event => setPreAnalyze(event.target.checked)} className="mt-1" /><span><span className="block text-sm font-medium">上传前使用 AI 预分析切块策略</span><span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>勾选后可选择内容模板，AI 将结合文档结构推荐参数并生成切片预览；不勾选则直接按原有流程上传。</span></span></label><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-medium">选择内容类型模板</h4><span className="text-xs" style={{ color: preAnalyze ? 'var(--color-cyan)' : 'var(--color-text-3)' }}>{preAnalyze ? '将用于本文件的 AI 预分析' : '开启预分析后可选择'}</span></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{CHUNK_METHODS.map(method => { const active = chunkMethod === method.id; return <button key={method.id} type="button" disabled={!preAnalyze} onClick={() => setChunkMethod(method.id)} className="rounded-xl p-3 text-left transition-colors" style={{ background: active ? 'var(--color-cyan-dim)' : 'var(--color-surface-2)', border: `1px solid ${active && preAnalyze ? 'var(--color-cyan)' : 'var(--color-border)'}`, opacity: preAnalyze ? 1 : .58, cursor: preAnalyze ? 'pointer' : 'not-allowed' }}><span className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{method.name}</span>{active && <span className="text-xs" style={{ color: 'var(--color-cyan)' }}>已选</span>}</span><span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-2)' }}>{method.description}</span><span className="mt-2 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>适用：{method.fit}</span></button> })}</div><p className="mt-3 text-[11px] leading-5" style={{ color: 'var(--color-text-3)' }}>模板参考 RAGFlow 常见解析方式。实际分块效果取决于文档格式与后端解析能力。</p></div>}
+        {phase === 'choice' && <div className="mx-auto max-w-4xl space-y-5 py-2">
+          <div className="text-center">
+            <div className="mb-2 text-3xl" style={{ color: 'var(--color-cyan)' }}>▤</div>
+            <h3 className="font-semibold">为这份文件设置上传方式</h3>
+            <p className="mt-1 text-sm" style={{ color: 'var(--color-text-3)' }}>每份文件分别设置，下一份文件可单独选择。</p>
+          </div>
+
+          <section className="rounded-2xl p-4 sm:p-5" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-start gap-3">
+              <input id="pre-analyze-toggle" type="checkbox" checked={preAnalyze} onChange={event => setPreAnalyze(event.target.checked)} className="mt-1 h-4 w-4 accent-cyan-400" />
+              <label htmlFor="pre-analyze-toggle" className="min-w-0 flex-1 cursor-pointer">
+                <span className="block text-sm font-semibold">上传前 AI 预分析</span>
+                <span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>先分析文档并推荐切块参数，确认预览后再正式入库。关闭时直接按原有流程上传。</span>
+              </label>
+              <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ color: preAnalyze ? 'var(--color-cyan)' : 'var(--color-text-3)', background: preAnalyze ? 'var(--color-cyan-dim)' : 'var(--color-surface)' }}>{preAnalyze ? '已开启' : '未开启'}</span>
+            </div>
+          </section>
+
+          <section className="rounded-2xl p-4 sm:p-5" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold">内容类型模板</h4>
+                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-3)' }}>选择最接近文档内容的类型</p>
+              </div>
+              {preAnalyze && <span className="text-xs" style={{ color: 'var(--color-cyan)' }}>当前选择：{CHUNK_METHODS.find(method => method.id === chunkMethod)?.name}</span>}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {CHUNK_METHODS.map(method => {
+                const active = chunkMethod === method.id
+                return <button key={method.id} type="button" disabled={!preAnalyze} aria-pressed={active} onClick={() => setChunkMethod(method.id)} className="rounded-xl p-3.5 text-left transition-colors" style={{ background: active && preAnalyze ? 'var(--color-cyan-dim)' : 'var(--color-surface-2)', border: `1px solid ${active && preAnalyze ? 'var(--color-cyan)' : 'var(--color-border)'}`, opacity: preAnalyze ? 1 : .5, cursor: preAnalyze ? 'pointer' : 'not-allowed' }}>
+                  <span className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{method.name}</span>{active && preAnalyze && <span className="text-[11px]" style={{ color: 'var(--color-cyan)' }}>已选</span>}</span>
+                  <span className="mt-1.5 block text-xs leading-5" style={{ color: 'var(--color-text-2)' }}>{method.description}</span>
+                  <span className="mt-2 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>适用：{method.fit}</span>
+                </button>
+              })}
+            </div>
+          </section>
+        </div>}
 
         {phase === 'analyzing' && <div className="flex min-h-64 flex-col items-center justify-center text-center"><span className="mb-4 h-9 w-9 animate-spin rounded-full border-2 border-current border-r-transparent" style={{ color: 'var(--color-cyan)' }} /><h3 className="font-medium">正在分析文档结构</h3><p className="mt-2 max-w-md text-sm" style={{ color: 'var(--color-text-3)' }}>AI 正在识别文档类型、内容层次和合适的切块方式。分析完成前不会开始正式入库。</p></div>}
 
