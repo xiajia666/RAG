@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { api, uploadDocument } from '../api/client'
 import type { Document, KnowledgeBase } from '../api/types'
 import { useAuth } from '../store/auth'
 import ChunkingUploadFlow from '../components/ChunkingUploadFlow'
@@ -31,6 +31,7 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
   const [accessMode, setAccessMode] = useState<'tenant' | 'restricted'>('tenant')
   const [members, setMembers] = useState<KbMember[]>([])
   const [uploadQueue, setUploadQueue] = useState<UploadQueue | null>(null)
+  const [preAnalyze, setPreAnalyze] = useState(false)
 
   async function load() {
     const list = await api.get<KnowledgeBase[]>('/api/kbs')
@@ -56,14 +57,31 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
       setWizard(false); setStep(0); setName(''); setDescription(''); setFiles([])
       await load(); setSelected(created)
       onNavigate(`kbs/${created.id}`)
-      if (initialFiles.length) setUploadQueue({ kbId: created.id, files: initialFiles })
+      if (initialFiles.length && preAnalyze) setUploadQueue({ kbId: created.id, files: initialFiles })
+      else if (initialFiles.length) {
+        const failures: string[] = []
+        for (const file of initialFiles) {
+          try { await uploadDocument(created.id, file) }
+          catch (e) { failures.push(`${file.name}: ${e instanceof Error ? e.message : '导入失败'}`) }
+        }
+        setDocs(await api.get<Document[]>(`/api/kbs/${created.id}/documents`))
+        if (failures.length) setError(`知识库已创建，以下文件导入失败：${failures.join('；')}`)
+      }
     } catch (e) { setError(e instanceof Error ? e.message : '创建失败') }
     finally { setBusy(false) }
   }
   async function uploadToSelected(list: FileList | null) {
     if (!selected || !list?.length) return
     setError('')
-    setUploadQueue({ kbId: selected.id, files: Array.from(list) })
+    const filesToUpload = Array.from(list)
+    if (preAnalyze) {
+      setUploadQueue({ kbId: selected.id, files: filesToUpload })
+      return
+    }
+    setBusy(true)
+    try { for (const file of filesToUpload) await uploadDocument(selected.id, file); setDocs(await api.get<Document[]>(`/api/kbs/${selected.id}/documents`)); await load() }
+    catch (e) { setError(e instanceof Error ? e.message : '上传失败') }
+    finally { setBusy(false) }
   }
   async function saveDetails() {
     if (!selected) return
@@ -96,7 +114,7 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
   const canEditSelected = !!selected && (user?.role === 'admin' || selected.access_role === 'editor')
   if (selected) return <div className="flex-1 overflow-y-auto p-6 animate-fade-in">
     <div className="flex items-center gap-2 text-sm mb-5" style={{ color: 'var(--color-text-3)' }}><button onClick={() => { setSelected(null); onNavigate('kbs') }} style={{ color: 'var(--color-cyan)' }}>知识库</button><span>›</span><span style={{ color: 'var(--color-text)' }}>{selected.name}</span></div>
-    <section className="rounded-xl p-5 mb-5" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}><div className="flex items-start gap-4"><div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{ color: 'var(--color-cyan)', background: 'var(--color-cyan-dim)' }}>▤</div><div className="flex-1"><h1 className="text-xl font-bold">{selected.name}</h1><p className="mt-1 text-sm" style={{ color: 'var(--color-text-2)' }}>{selected.description || '暂无描述'}</p><p className="mt-3 text-xs" style={{ color: 'var(--color-text-3)' }}>{docs.length} 份文档 · 创建于 {String(selected.created_at || '').slice(0, 10)}</p></div>{canEditSelected && <label className="px-3 py-2 rounded-lg text-sm cursor-pointer" style={{ background: 'var(--color-cyan)', color: 'var(--color-text-inv)' }}>＋ 上传文档<input type="file" multiple className="hidden" onChange={e => { void uploadToSelected(e.target.files); e.currentTarget.value = '' }} /></label>}</div></section>
+    <section className="rounded-xl p-5 mb-5" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}><div className="flex items-start gap-4"><div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{ color: 'var(--color-cyan)', background: 'var(--color-cyan-dim)' }}>▤</div><div className="flex-1"><h1 className="text-xl font-bold">{selected.name}</h1><p className="mt-1 text-sm" style={{ color: 'var(--color-text-2)' }}>{selected.description || '暂无描述'}</p><p className="mt-3 text-xs" style={{ color: 'var(--color-text-3)' }}>{docs.length} 份文档 · 创建于 {String(selected.created_at || '').slice(0, 10)}</p></div>{canEditSelected && <div className="flex flex-col items-end gap-2"><label className="flex cursor-pointer items-center gap-2 text-xs" style={{ color: 'var(--color-text-2)' }}><input type="checkbox" checked={preAnalyze} onChange={e => setPreAnalyze(e.target.checked)} />上传前 AI 预分析</label><label className="px-3 py-2 rounded-lg text-sm cursor-pointer" style={{ background: 'var(--color-cyan)', color: 'var(--color-text-inv)' }}>＋ 上传文档<input type="file" multiple className="hidden" onChange={e => { void uploadToSelected(e.target.files); e.currentTarget.value = '' }} /></label></div>}</div></section>
     {error && <p className="mb-4 text-sm" style={{ color: 'var(--color-red)' }}>{error}</p>}
     <div className="grid xl:grid-cols-3 gap-4">
       <section className="xl:col-span-2 rounded-xl overflow-hidden" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}><div className="flex justify-between items-center p-4"><h2 className="font-semibold">文档列表</h2><span className="text-xs" style={{ color: 'var(--color-text-3)' }}>{busy ? '处理中…' : `${docs.length} 份`}</span></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr style={{ color: 'var(--color-text-3)', borderTop: '1px solid var(--color-border)' }}>{['文件名', '大小', '切片', '添加时间', '操作'].map(v => <th key={v} className="p-3 text-left text-xs">{v}</th>)}</tr></thead><tbody>{docs.map(doc => <tr key={doc.id} style={{ borderTop: '1px solid var(--color-border)' }}><td className="p-3">{doc.filename}</td><td className="p-3 text-xs" style={{ color: 'var(--color-text-3)' }}>{formatSize(doc.size)}</td><td className="p-3 text-xs">{doc.chunk_count}</td><td className="p-3 text-xs" style={{ color: 'var(--color-text-3)' }}>{String(doc.created_at).slice(0, 10)}</td><td className="p-3"><button onClick={() => showPreview(doc)} className="text-xs" style={{ color: 'var(--color-cyan)' }}>切片预览</button></td></tr>)}</tbody></table>{!docs.length && <p className="p-6 text-center text-sm" style={{ color: 'var(--color-text-3)' }}>此知识库还没有文档</p>}</div></section>
@@ -114,7 +132,7 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
     {wizard && <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(7,11,18,.82)', backdropFilter: 'blur(6px)' }}><div className="w-full max-w-lg rounded-2xl p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-md)' }}><div className="flex justify-between mb-5"><div><h2 className="font-semibold">新建知识库</h2><p className="text-xs mt-1" style={{ color: 'var(--color-text-3)' }}>步骤 {step + 1} / 3</p></div><button onClick={() => setWizard(false)}>关闭</button></div><div className="flex gap-2 mb-6">{['基本信息', '模型选择', '数据导入'].map((label, i) => <div className="flex-1" key={label}><div className="h-1 rounded" style={{ background: i <= step ? 'var(--color-cyan)' : 'var(--color-surface-3)' }} /><span className="text-xs" style={{ color: i === step ? 'var(--color-cyan)' : 'var(--color-text-3)' }}>{label}</span></div>)}</div>
       {step === 0 && <div className="space-y-4"><label className="block text-sm">知识库名称<input value={name} onChange={e => setName(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg" style={{ color: 'var(--color-text)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }} /></label><label className="block text-sm">描述<textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="mt-1 w-full px-3 py-2 rounded-lg" style={{ color: 'var(--color-text)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }} /></label></div>}
       {step === 1 && <div className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-cyan)' }}><div className="text-sm font-medium">{modelInfo?.embedding_model || '正在读取服务器模型…'}</div><p className="text-xs mt-2" style={{ color: modelInfo?.embedding_configured ? 'var(--color-text-3)' : 'var(--color-amber)' }}>{modelInfo?.embedding_configured ? '使用服务端当前配置的嵌入模型，密钥仅保存在服务端。' : '尚未配置嵌入服务 API 密钥；上传文档前需要在服务器配置。'}</p></div>}
-      {step === 2 && <label className="block rounded-xl p-8 text-center cursor-pointer" style={{ border: '1px dashed var(--color-border-md)', color: 'var(--color-text-2)' }}>选择或拖入需要导入的文件<input type="file" multiple accept=".pdf,.docx,.txt,.md" className="block mt-4 w-full text-xs" onChange={e => setFiles(Array.from(e.target.files || []))} /><span className="block mt-2 text-xs" style={{ color: 'var(--color-text-3)' }}>{files.length ? files.map(file => file.name).join('、') : 'PDF、DOCX、TXT、Markdown'}</span></label>}
+      {step === 2 && <div><label className="block rounded-xl p-8 text-center cursor-pointer" style={{ border: '1px dashed var(--color-border-md)', color: 'var(--color-text-2)' }}>选择或拖入需要导入的文件<input type="file" multiple accept=".pdf,.docx,.txt,.md" className="block mt-4 w-full text-xs" onChange={e => setFiles(Array.from(e.target.files || []))} /><span className="block mt-2 text-xs" style={{ color: 'var(--color-text-3)' }}>{files.length ? files.map(file => file.name).join('、') : 'PDF、DOCX、TXT、Markdown'}</span></label><label className="mt-4 flex cursor-pointer items-center gap-2 text-sm" style={{ color: 'var(--color-text-2)' }}><input type="checkbox" checked={preAnalyze} onChange={e => setPreAnalyze(e.target.checked)} />上传前使用 AI 预分析切块策略</label></div>}
       {error && <p className="mt-4 text-sm" style={{ color: 'var(--color-red)' }}>{error}</p>}<div className="flex justify-end gap-2 mt-6"><button onClick={() => step ? setStep(step - 1) : setWizard(false)} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>{step ? '上一步' : '取消'}</button><button disabled={busy || (step === 0 && !name.trim())} onClick={() => step < 2 ? setStep(step + 1) : void createKnowledgeBase()} className="px-4 py-2 rounded-lg text-sm" style={{ background: 'var(--color-cyan)', color: 'var(--color-text-inv)', opacity: busy ? .6 : 1 }}>{busy ? '创建中…' : step === 2 ? '创建并导入' : '下一步'}</button></div></div></div>}
   </div>
 }

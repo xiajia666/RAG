@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, ApiError } from '../api/client'
+import { api, ApiError, uploadDocument } from '../api/client'
 import type { Document } from '../api/types'
 import ChunkingUploadFlow from './ChunkingUploadFlow'
 
@@ -14,6 +14,8 @@ export default function DocumentPanel({ kbId, open, isAdmin, onClose }: Props) {
   const [docs, setDocs] = useState<Document[]>([])
   const [error, setError] = useState('')
   const [drag, setDrag] = useState(false)
+  const [preAnalyze, setPreAnalyze] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [uploadQueue, setUploadQueue] = useState<File[] | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -32,10 +34,28 @@ export default function DocumentPanel({ kbId, open, isAdmin, onClose }: Props) {
     }
   }, [open, load])
 
-  function handleFiles(files: FileList | null) {
+  async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setError('')
-    setUploadQueue(Array.from(files))
+    const selectedFiles = Array.from(files)
+    if (preAnalyze) {
+      setUploadQueue(selectedFiles)
+      return
+    }
+    setUploading(true)
+    try {
+      const failures: string[] = []
+      for (const file of selectedFiles) {
+        try { await uploadDocument(kbId, file) }
+        catch (err) { failures.push(`${file.name}：${err instanceof ApiError ? err.message : '上传失败'}`) }
+      }
+      await load()
+      if (failures.length) setError(failures.join('；'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function remove(id: string) {
@@ -75,8 +95,9 @@ export default function DocumentPanel({ kbId, open, isAdmin, onClose }: Props) {
               handleFiles(e.dataTransfer.files)
             }}
           >
-            点击或拖拽文件到此处上传（PDF / Word / txt / md / csv 等）
+            {uploading ? '正在上传…' : '点击或拖拽文件到此处上传（PDF / Word / txt / md / csv 等）'}
           </div>
+          <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm" style={{ color: 'var(--color-text-2)' }}><input type="checkbox" checked={preAnalyze} onChange={e => setPreAnalyze(e.target.checked)} />上传前使用 AI 预分析切块策略</label>
           <input
             ref={fileRef}
             type="file"
