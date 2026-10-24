@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 venv/
 *.xml
+jenkinsfile
 # 密钥与本地配置
 .env
 

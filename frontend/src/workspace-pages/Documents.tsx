@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, downloadDocument, uploadDocument } from '../api/client'
+import { api, downloadDocument } from '../api/client'
 import type { Document, KnowledgeBase } from '../api/types'
 import { useAuth } from '../store/auth'
 import ChunkingUploadFlow from '../components/ChunkingUploadFlow'
@@ -21,7 +21,6 @@ export default function Documents() {
   const [error, setError] = useState('')
   const [drag, setDrag] = useState(false)
   const [uploadQueue, setUploadQueue] = useState<UploadQueue | null>(null)
-  const [preAnalyze, setPreAnalyze] = useState(false)
 
   async function refresh() {
     const [documents, knowledgeBases] = await Promise.all([api.get<ListedDocument[]>('/api/documents'), api.get<KnowledgeBase[]>('/api/kbs')])
@@ -38,14 +37,7 @@ export default function Documents() {
     if (!targetKb) { setError('请先创建知识库，再上传文档'); return }
     if (!writableKbs.some(kb => kb.id === targetKb)) { setError('你没有所选知识库的编辑权限'); return }
     setError('')
-    if (preAnalyze) {
-      setUploadQueue({ kbId: targetKb, files: list })
-      return
-    }
-    setBusy(true)
-    try { for (const file of list) await uploadDocument(targetKb, file); await refresh() }
-    catch (e) { setError(e instanceof Error ? e.message : '上传失败') }
-    finally { setBusy(false) }
+    setUploadQueue({ kbId: targetKb, files: list })
   }
   async function remove(ids: string[]) {
     const writableIds = new Set(writableKbs.map(kb => kb.id))
@@ -64,7 +56,6 @@ export default function Documents() {
   return <div className="flex-1 flex overflow-hidden animate-fade-in">
     <main className="flex-1 overflow-y-auto p-6"><div className="flex items-center justify-between mb-5"><div><h1 className="text-2xl font-bold">文档管理</h1><p className="text-sm mt-1" style={{ color: 'var(--color-text-3)' }}>{filtered.length} 份文档</p></div><label className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer" style={{ background: 'var(--color-cyan)', color: 'var(--color-text-inv)', opacity: writableKbs.length ? 1 : .5 }}>{writableKbs.length ? '＋ 上传文档' : '无可编辑知识库'}<input type="file" multiple accept=".pdf,.docx,.txt,.md" disabled={!writableKbs.length} className="hidden" onChange={e => { if (e.target.files) void uploadFiles(e.target.files); e.currentTarget.value = '' }} /></label></div>
       <label onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); void uploadFiles(e.dataTransfer.files) }} className="block rounded-xl border-2 border-dashed p-6 text-center mb-5" style={{ borderColor: drag ? 'var(--color-cyan)' : 'var(--color-border)', background: drag ? 'var(--color-cyan-dim)' : 'transparent', color: 'var(--color-text-3)' }}><span className="text-sm">{busy ? '正在处理文档…' : '将文件拖到此处上传（上传到当前筛选的知识库或第一个知识库）'}</span><span className="block text-xs mt-1">支持 PDF、DOCX、TXT、Markdown</span></label>
-      <label className="mb-5 flex w-fit cursor-pointer items-center gap-2 text-sm" style={{ color: 'var(--color-text-2)' }}><input type="checkbox" checked={preAnalyze} onChange={e => setPreAnalyze(e.target.checked)} />上传前使用 AI 预分析切块策略</label>
       {error && <div className="mb-4 text-sm" style={{ color: 'var(--color-red)' }}>{error}</div>}
       <div className="flex flex-wrap gap-2 mb-4"><input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索文档名…" className="flex-1 min-w-48 px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--color-text)', background: 'var(--color-surface)', border: '1px solid var(--color-border)' }} /><select value={kbFilter} onChange={e => setKbFilter(e.target.value)} className="px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--color-text-2)', background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}><option value="">全部知识库</option>{kbs.map(kb => <option key={kb.id} value={kb.id}>{kb.name}</option>)}</select><select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--color-text-2)', background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}><option value="">全部类型</option>{['PDF', 'DOCX', 'TXT', 'MD'].map(type => <option key={type}>{type}</option>)}</select></div>
       {!!selected.size && <div className="flex items-center gap-3 p-3 mb-3 rounded-lg" style={{ background: 'var(--color-cyan-dim)' }}><span className="text-sm" style={{ color: 'var(--color-cyan)' }}>已选 {selected.size} 份</span><button onClick={() => void remove([...selected])} className="text-sm" style={{ color: 'var(--color-red)' }}>批量删除</button><button onClick={() => setSelected(new Set())} className="ml-auto text-xs">取消</button></div>}

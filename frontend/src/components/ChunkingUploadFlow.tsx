@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { analyzeDocument, confirmAnalyzedDocument, previewDocumentChunks } from '../api/client'
+import { useState } from 'react'
+import { analyzeDocument, confirmAnalyzedDocument, previewDocumentChunks, uploadDocument } from '../api/client'
 import type { ChunkAnalysis, ChunkPreview, ChunkingStrategy } from '../api/client'
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
   onComplete: () => void | Promise<void>
 }
 
-type Phase = 'analyzing' | 'previewing' | 'ready' | 'uploading' | 'error'
+type Phase = 'choice' | 'analyzing' | 'previewing' | 'ready' | 'uploading' | 'error'
 
 const inputStyle = {
   background: 'var(--color-surface-2)',
@@ -19,7 +19,8 @@ const inputStyle = {
 
 export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }: Props) {
   const [fileIndex, setFileIndex] = useState(0)
-  const [phase, setPhase] = useState<Phase>('analyzing')
+  const [phase, setPhase] = useState<Phase>('choice')
+  const [preAnalyze, setPreAnalyze] = useState(false)
   const [analysis, setAnalysis] = useState<ChunkAnalysis | null>(null)
   const [preview, setPreview] = useState<ChunkPreview | null>(null)
   const [previewedStrategy, setPreviewedStrategy] = useState('')
@@ -29,41 +30,74 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
   const file = files[fileIndex]
   const isLast = fileIndex === files.length - 1
 
-  useEffect(() => {
-    if (!file) return
-    let active = true
-    setPhase('analyzing')
+  async function finish() {
+    onClose()
+    try { await onComplete() } catch { /* The upload is already complete; keep refresh errors out of upload retry flow. */ }
+  }
+
+  function advanceToNext() {
+    setFileIndex(index => index + 1)
+    setPhase('choice')
+    setPreAnalyze(false)
     setAnalysis(null)
     setPreview(null)
     setPreviewedStrategy('')
     setStrategy(null)
     setError('')
     setPreviewError('')
-    analyzeDocument(kbId, file)
-      .then(result => {
-        if (!active) return
-        setAnalysis(result)
-        setPreview({ estimated_chunk_count: result.estimated_chunk_count, preview: result.preview, warnings: result.warnings })
-        setPreviewedStrategy(JSON.stringify(result.strategy))
-        setStrategy(result.strategy)
-        setPhase('ready')
-      })
-      .catch(reason => {
-        if (!active) return
-        setError(reason instanceof Error ? reason.message : '文档分析失败')
-        setPhase('error')
-      })
-    return () => { active = false }
-  }, [kbId, file])
+  }
 
-  async function finish() {
-    onClose()
-    try { await onComplete() } catch { /* The upload is already complete; keep refresh errors out of upload retry flow. */ }
+  async function continueAfterCurrent() {
+    if (isLast) return finish()
+    advanceToNext()
   }
 
   async function skipCurrent() {
-    if (isLast) return finish()
-    setFileIndex(index => index + 1)
+    await continueAfterCurrent()
+  }
+
+  async function analyzeCurrent() {
+    setPhase('analyzing')
+    setError('')
+    try {
+      const result = await analyzeDocument(kbId, file)
+      setAnalysis(result)
+      setPreview({ estimated_chunk_count: result.estimated_chunk_count, preview: result.preview, warnings: result.warnings })
+      setPreviewedStrategy(JSON.stringify(result.strategy))
+      setStrategy(result.strategy)
+      setPhase('ready')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '文档分析失败')
+      setPhase('error')
+    }
+  }
+
+  async function uploadWithoutAnalysis() {
+    setPhase('uploading')
+    setError('')
+    try {
+      await uploadDocument(kbId, file)
+      await continueAfterCurrent()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '上传失败')
+      setPhase('error')
+    }
+  }
+
+  async function startCurrentFile() {
+    if (preAnalyze) return analyzeCurrent()
+    return uploadWithoutAnalysis()
+  }
+
+  function returnToChoice() {
+    setPhase('choice')
+    setPreAnalyze(false)
+    setAnalysis(null)
+    setPreview(null)
+    setPreviewedStrategy('')
+    setStrategy(null)
+    setError('')
+    setPreviewError('')
   }
 
   async function confirmUpload() {
@@ -74,7 +108,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
       if (!analysis?.analysis_id) throw new Error('分析结果缺少临时任务编号，请重新分析')
       await confirmAnalyzedDocument(kbId, analysis.analysis_id, strategy)
       if (isLast) await finish()
-      else setFileIndex(index => index + 1)
+      else advanceToNext()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '上传失败')
       setPhase('error')
@@ -112,17 +146,21 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     <section role="dialog" aria-modal="true" aria-labelledby="chunking-flow-title" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-md)' }}>
       <header className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: 'var(--color-border)' }}>
         <div className="min-w-0">
-          <div className="mb-2 flex items-center gap-2 text-xs" style={{ color: 'var(--color-cyan)' }}><span className="h-2 w-2 rounded-full" style={{ background: 'var(--color-cyan)' }} />AI DOCUMENT ANALYSIS <span style={{ color: 'var(--color-text-3)' }}>· {fileIndex + 1} / {files.length}</span></div>
-          <h2 id="chunking-flow-title" className="text-lg font-semibold">上传前分析与切块预览</h2>
+          <div className="mb-2 flex items-center gap-2 text-xs" style={{ color: 'var(--color-cyan)' }}><span className="h-2 w-2 rounded-full" style={{ background: 'var(--color-cyan)' }} />DOCUMENT UPLOAD <span style={{ color: 'var(--color-text-3)' }}>· {fileIndex + 1} / {files.length}</span></div>
+          <h2 id="chunking-flow-title" className="text-lg font-semibold">上传前设置</h2>
           <p className="mt-1 max-w-3xl truncate text-sm" style={{ color: 'var(--color-text-3)' }} title={file.name}>{file.name} · {formatSize(file.size)}</p>
         </div>
-        <button type="button" disabled={phase === 'uploading'} onClick={onClose} className="rounded-lg px-3 py-1 text-sm" style={{ color: 'var(--color-text-2)', border: '1px solid var(--color-border)', opacity: phase === 'uploading' ? .5 : 1 }}>关闭</button>
+        <button type="button" disabled={busy} onClick={onClose} className="rounded-lg px-3 py-1 text-sm" style={{ color: 'var(--color-text-2)', border: '1px solid var(--color-border)', opacity: busy ? .5 : 1 }}>关闭</button>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        {phase === 'choice' && <div className="mx-auto flex min-h-64 max-w-xl flex-col justify-center"><div className="mb-5 text-center"><div className="mb-3 text-4xl" style={{ color: 'var(--color-cyan)' }}>▤</div><h3 className="font-semibold">为这份文件选择上传方式</h3><p className="mt-2 text-sm" style={{ color: 'var(--color-text-3)' }}>此选项仅对当前文件生效；队列中的每份文件都会单独确认。</p></div><label className="flex cursor-pointer items-start gap-3 rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><input type="checkbox" checked={preAnalyze} onChange={event => setPreAnalyze(event.target.checked)} className="mt-1" /><span><span className="block text-sm font-medium">上传前使用 AI 预分析切块策略</span><span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>勾选后会先分析文档、推荐参数并预览切片；不勾选则直接按原有流程上传。</span></span></label></div>}
+
         {phase === 'analyzing' && <div className="flex min-h-64 flex-col items-center justify-center text-center"><span className="mb-4 h-9 w-9 animate-spin rounded-full border-2 border-current border-r-transparent" style={{ color: 'var(--color-cyan)' }} /><h3 className="font-medium">正在分析文档结构</h3><p className="mt-2 max-w-md text-sm" style={{ color: 'var(--color-text-3)' }}>AI 正在识别文档类型、内容层次和合适的切块方式。分析完成前不会开始正式入库。</p></div>}
 
-        {phase === 'error' && <div className="mx-auto flex min-h-64 max-w-lg flex-col items-center justify-center text-center"><div className="mb-3 text-3xl" style={{ color: 'var(--color-amber)' }}>!</div><h3 className="font-medium">{analysis ? '上传未完成' : '文档预分析失败'}</h3><p className="mt-2 text-sm" style={{ color: 'var(--color-red)' }}>{error}</p><p className="mt-2 text-xs" style={{ color: 'var(--color-text-3)' }}>{analysis ? '可以返回调整参数后重试上传，或跳过这份文件。' : '检查网络或稍后重试；预分析失败时不会直接使用默认参数入库。'}</p></div>}
+        {phase === 'uploading' && <div className="flex min-h-64 flex-col items-center justify-center text-center"><span className="mb-4 h-9 w-9 animate-spin rounded-full border-2 border-current border-r-transparent" style={{ color: 'var(--color-cyan)' }} /><h3 className="font-medium">正在上传并建立索引</h3><p className="mt-2 text-sm" style={{ color: 'var(--color-text-3)' }}>文件完成后会继续处理队列中的下一份。</p></div>}
+
+        {phase === 'error' && <div className="mx-auto flex min-h-64 max-w-lg flex-col items-center justify-center text-center"><div className="mb-3 text-3xl" style={{ color: 'var(--color-amber)' }}>!</div><h3 className="font-medium">{analysis ? '上传未完成' : preAnalyze ? '文档预分析失败' : '文件上传失败'}</h3><p className="mt-2 text-sm" style={{ color: 'var(--color-red)' }}>{error}</p><p className="mt-2 text-xs" style={{ color: 'var(--color-text-3)' }}>{analysis ? '可以调整参数后重新预览，或重试上传。' : preAnalyze ? '预分析失败时不会直接使用默认参数入库。' : '重试上传，或跳过此文件继续处理队列。'}</p></div>}
 
         {analysis && strategy && <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,.85fr)]">
           <div className="space-y-4">
@@ -153,14 +191,16 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
       </div>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t p-4" style={{ borderColor: 'var(--color-border)' }}>
-        <p className="text-xs" style={{ color: 'var(--color-text-3)' }}>{files.length > 1 ? `队列中还有 ${files.length - fileIndex} 份文件` : '预分析文件仅用于生成建议；确认后才会正式上传并建立索引。'}</p>
+        <p className="text-xs" style={{ color: 'var(--color-text-3)' }}>{files.length > 1 ? `逐份确认上传方式 · 队列中还有 ${files.length - fileIndex} 份文件` : '未勾选预分析时会直接使用原有上传流程。'}</p>
         <div className="flex gap-2">
+          {phase === 'choice' && <button type="button" onClick={() => void startCurrentFile()} className="rounded-lg px-4 py-2 text-sm font-medium" style={{ color: 'var(--color-text-inv)', background: 'var(--color-cyan)' }}>{preAnalyze ? '开始 AI 预分析' : '按原流程上传'}</button>}
           {isPreviewStale && <button type="button" disabled={phase !== 'ready'} onClick={() => void refreshPreview()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)', opacity: phase === 'ready' ? 1 : .55 }}>{phase === 'previewing' ? '正在生成预览…' : '按当前参数刷新预览'}</button>}
-          {phase === 'error' && !analysis && <button type="button" onClick={() => { setPhase('analyzing'); setError(''); analyzeDocument(kbId, file).then(result => { setAnalysis(result); setPreview({ estimated_chunk_count: result.estimated_chunk_count, preview: result.preview, warnings: result.warnings }); setPreviewedStrategy(JSON.stringify(result.strategy)); setStrategy(result.strategy); setPhase('ready') }).catch(reason => { setError(reason instanceof Error ? reason.message : '文档分析失败'); setPhase('error') }) }} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>重试分析</button>}
+          {phase === 'error' && !analysis && <button type="button" onClick={() => void startCurrentFile()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>{preAnalyze ? '重试分析' : '重试上传'}</button>}
           {phase === 'error' && analysis && <button type="button" disabled={isPreviewStale} onClick={() => void confirmUpload()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)', opacity: isPreviewStale ? .5 : 1 }}>重试上传</button>}
-          {phase === 'error' && <button type="button" onClick={() => void skipCurrent()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>{isLast ? '结束' : '跳过此文件'}</button>}
-          {phase === 'ready' && files.length > 1 && <button type="button" onClick={() => void skipCurrent()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>跳过此文件</button>}
-          <button type="button" disabled={phase !== 'ready' || !strategy || isPreviewStale || strategy.chunk_size <= 0 || strategy.chunk_overlap < 0 || strategy.chunk_overlap >= strategy.chunk_size} onClick={() => void confirmUpload()} className="rounded-lg px-4 py-2 text-sm font-medium" style={{ color: 'var(--color-text-inv)', background: 'var(--color-cyan)', opacity: phase === 'ready' && !isPreviewStale ? 1 : .55 }}>{phase === 'uploading' ? '正在上传并索引…' : isPreviewStale ? '请先刷新切片预览' : isLast ? '确认策略并上传' : '确认并处理下一份'}</button>
+          {phase === 'error' && <button type="button" onClick={returnToChoice} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>重新选择方式</button>}
+          {(phase === 'error' || phase === 'choice' || phase === 'ready') && <button type="button" onClick={() => void skipCurrent()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>{isLast ? '结束' : '跳过此文件'}</button>}
+          {phase === 'ready' && <button type="button" onClick={returnToChoice} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>返回修改方式</button>}
+          {phase === 'ready' && <button type="button" disabled={!strategy || isPreviewStale || strategy.chunk_size <= 0 || strategy.chunk_overlap < 0 || strategy.chunk_overlap >= strategy.chunk_size} onClick={() => void confirmUpload()} className="rounded-lg px-4 py-2 text-sm font-medium" style={{ color: 'var(--color-text-inv)', background: 'var(--color-cyan)', opacity: !isPreviewStale ? 1 : .55 }}>{isPreviewStale ? '请先刷新切片预览' : isLast ? '确认策略并上传' : '确认并处理下一份'}</button>}
         </div>
         {previewError && <p className="basis-full text-right text-xs" style={{ color: 'var(--color-red)' }}>{previewError}</p>}
       </footer>
