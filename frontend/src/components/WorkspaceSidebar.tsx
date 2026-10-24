@@ -46,7 +46,7 @@ export default function Sidebar({ current, onNavigate, collapsed, onToggle, user
       }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-3.5 py-4" style={{ borderBottom: '1px solid var(--color-border)', minHeight: 56 }}>
+      <div className={`flex items-center ${collapsed ? 'flex-col gap-2 px-2 py-3' : 'gap-2.5 px-3.5 py-4'}`} style={{ borderBottom: '1px solid var(--color-border)', minHeight: collapsed ? 88 : 56 }}>
         <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-cyan)' }}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <circle cx="7" cy="7" r="2.5" fill="var(--color-text-inv)"/>
@@ -60,9 +60,11 @@ export default function Sidebar({ current, onNavigate, collapsed, onToggle, user
         )}
         <button
           onClick={onToggle}
-          className="ml-auto shrink-0 rounded p-1 transition-colors"
-          style={{ color: 'var(--color-text-3)' }}
-          title={collapsed ? '展开' : '收起'}
+          className={`shrink-0 rounded-lg transition-colors ${collapsed ? 'flex h-8 w-8 items-center justify-center' : 'ml-auto p-1'}`}
+          style={{ color: 'var(--color-text-2)', background: collapsed ? 'var(--color-surface-2)' : 'transparent', border: collapsed ? '1px solid var(--color-border)' : '1px solid transparent' }}
+          title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          aria-expanded={!collapsed}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             {collapsed
