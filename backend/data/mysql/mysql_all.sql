@@ -87,25 +87,6 @@ CREATE TABLE IF NOT EXISTS documents (
     FOREIGN KEY (tenant_id, kb_id) REFERENCES knowledge_bases(tenant_id, id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS chunks (
-  id VARCHAR(32) PRIMARY KEY,
-  tenant_id VARCHAR(32) NOT NULL,
-  doc_id VARCHAR(32) NOT NULL,
-  kb_id VARCHAR(32) NOT NULL,
-  chunk_index INT NOT NULL,
-  content LONGTEXT NOT NULL,
-  embedding LONGBLOB NULL,
-  created_at VARCHAR(40) NOT NULL,
-  INDEX idx_chunks_kb (kb_id),
-  INDEX idx_chunks_doc (doc_id),
-  INDEX idx_chunks_tenant_kb (tenant_id, kb_id),
-  CONSTRAINT fk_chunks_document
-    FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE,
-  CONSTRAINT fk_chunks_tenant_document
-    FOREIGN KEY (tenant_id, doc_id, kb_id)
-    REFERENCES documents(tenant_id, id, kb_id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS sessions (
   id VARCHAR(32) PRIMARY KEY,
   tenant_id VARCHAR(32) NOT NULL,

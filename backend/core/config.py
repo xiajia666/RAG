@@ -22,6 +22,15 @@ MYSQL_SSL = os.getenv("MYSQL_SSL", "false").strip().lower() in ("1", "true", "ye
 MYSQL_SSL_CA = os.getenv("MYSQL_SSL_CA", "").strip()
 MYSQL_SSL_VERIFY = os.getenv("MYSQL_SSL_VERIFY", "true").strip().lower() not in ("0", "false", "no")
 
+# ---------- Elasticsearch（文档切片与向量） ----------
+
+ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://127.0.0.1:9200").strip()
+ELASTICSEARCH_API_KEY = os.getenv("ELASTICSEARCH_API_KEY", "").strip()
+ELASTICSEARCH_USERNAME = os.getenv("ELASTICSEARCH_USERNAME", "").strip()
+ELASTICSEARCH_PASSWORD = os.getenv("ELASTICSEARCH_PASSWORD", "").strip()
+ELASTICSEARCH_INDEX = os.getenv("ELASTICSEARCH_INDEX", "personal-rag-chunks").strip()
+ELASTICSEARCH_VERIFY_CERTS = os.getenv("ELASTICSEARCH_VERIFY_CERTS", "true").strip().lower() not in ("0", "false", "no")
+
 for _dir in (DATA_DIR, DOCUMENTS_DIR):
     os.makedirs(_dir, exist_ok=True)
 

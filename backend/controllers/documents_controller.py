@@ -36,11 +36,7 @@ def preview_document(doc_id: str, user=CurrentUser()):
     if not doc:
         raise HTTPException(404, "文档不存在")
     get_kb_for_user(doc["kb_id"], user)
-    chunks = db.query(
-        select(db.Chunk.chunk_index, db.Chunk.content, db.Chunk.created_at)
-        .where(db.Chunk.doc_id == doc_id, db.Chunk.tenant_id == user["tenant_id"])
-        .order_by(db.Chunk.chunk_index).limit(5),
-    )
+    chunks = vector_store.get_document_chunks(user["tenant_id"], doc_id, limit=5)
     return {"document": doc, "chunks": chunks}
 
 
@@ -79,6 +75,7 @@ def bulk_delete_documents(req: BulkDocumentDelete, user=CurrentUser()):
             get_kb_for_user(doc["kb_id"], user, write=True)
             docs.append(doc)
     for doc in docs:
+        vector_store.delete_document(user["tenant_id"], doc["id"])
         db.execute(delete(db.Document).where(db.Document.id == doc["id"], db.Document.tenant_id == user["tenant_id"]))
         document_service.remove_original_file(user["tenant_id"], doc["id"], doc["filename"])
     return {"deleted_count": len(docs)}
@@ -91,6 +88,7 @@ def delete_document(doc_id: str, user=CurrentUser()):
     if not doc:
         raise HTTPException(404, "文档不存在")
     get_kb_for_user(doc["kb_id"], user, write=True)
+    vector_store.delete_document(user["tenant_id"], doc_id)
     db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
     document_service.remove_original_file(user["tenant_id"], doc_id, doc["filename"])
     return {"deleted": True}

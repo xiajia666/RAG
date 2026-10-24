@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from core import config
 from models import (
-    Base, ChatSession, Chunk, Document, KnowledgeBase, KnowledgeBaseAccess,
+    Base, ChatSession, Document, KnowledgeBase, KnowledgeBaseAccess,
     KnowledgeBaseMember, Message, Tenant, TenantSetting, User,
 )
 

@@ -53,6 +53,10 @@ def ingest_document(tenant_id: str, kb_id: str, original_filename: str, data: by
             uploaded_file.write(data)
         chunk_count = vector_store.index_document(tenant_id, doc_id, kb_id, filename, text)
     except Exception as exc:
+        try:
+            vector_store.delete_document(tenant_id, doc_id)
+        except Exception:
+            pass
         document_repository.delete_document(tenant_id, doc_id)
         remove_original_file(tenant_id, doc_id, filename)
         raise DocumentIngestionError(f"向量化失败：{exc}", 500) from exc

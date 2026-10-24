@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from sqlalchemy import (
-    BigInteger, ForeignKey, ForeignKeyConstraint, Index, Integer, LargeBinary,
+    BigInteger, ForeignKey, ForeignKeyConstraint, Index, Integer,
     String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -83,24 +83,6 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
-
-class Chunk(Base):
-    __tablename__ = "chunks"
-    __table_args__ = (
-        ForeignKeyConstraint(["tenant_id", "doc_id", "kb_id"], ["documents.tenant_id", "documents.id", "documents.kb_id"], ondelete="CASCADE", name="fk_chunks_document_tenant"),
-        Index("idx_chunks_tenant_kb", "tenant_id", "kb_id"),
-        Index("idx_chunks_doc", "doc_id"),
-    )
-
-    id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(32), nullable=False)
-    doc_id: Mapped[str] = mapped_column(String(32), nullable=False)
-    kb_id: Mapped[str] = mapped_column(String(32), nullable=False)
-    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[bytes | None] = mapped_column(LargeBinary)
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
 

@@ -117,7 +117,8 @@ def delete_kb(kb_id: str, user=AdminUser()):
     docs = db.query(select(db.Document.id, db.Document.filename).where(
         db.Document.tenant_id == user["tenant_id"], db.Document.kb_id == kb_id
     ))
-    # 级联删除 docs / chunks / sessions / messages
+    # ES 切片不受 MySQL 外键级联管理，先删除向量索引再删除业务数据。
+    vector_store.delete_knowledge_base(user["tenant_id"], kb_id)
     db.execute(delete(db.KnowledgeBase).where(
         db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == user["tenant_id"]
     ))

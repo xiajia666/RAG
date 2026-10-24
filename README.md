@@ -5,7 +5,7 @@
 ## 功能特性
 
 - **多知识库**：按业务场景拆分（合同 / 财务 / 产品手册 / 售后话术 / 政策…），各库独立上传文档、独立检索问答。
-- **语义检索**：云端 Embedding 向量检索（非关键词匹配），上传时批量编码入库，查询只编码 query。
+- **语义检索**：Embedding 向量保存在 Elasticsearch，通过 kNN 检索；MySQL 继续保存用户、知识库、文档、会话等业务数据。
 - **企业多租户**：用户、知识库、文档和会话按租户隔离；知识库可设为企业共享或指定成员访问。
 - **团队权限**：管理员、编辑、只读三种企业角色；管理员可以为每个知识库再指定编辑/只读成员。
 - **产品工作台**：仪表盘、知识库向导、智能问答、文档管理、数据分析、团队管理和设置均接入后端数据。
@@ -68,6 +68,15 @@ EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
 EMBEDDING_API_KEY=sk-xxx
 EMBEDDING_MODEL=BAAI/bge-m3
 
+# 向量索引（文本切片与 embedding 都保存在 Elasticsearch）
+ELASTICSEARCH_URL=http://127.0.0.1:9200
+ELASTICSEARCH_INDEX=personal-rag-chunks
+# 云 ES 可使用 API Key，或使用用户名密码（二选一）
+ELASTICSEARCH_API_KEY=
+ELASTICSEARCH_USERNAME=
+ELASTICSEARCH_PASSWORD=
+ELASTICSEARCH_VERIFY_CERTS=true
+
 # JWT 密钥（留空则自动生成并持久化到 backend/data/.jwt_secret）
 JWT_SECRET=
 
@@ -101,6 +110,8 @@ Flask 应用使用工厂 `create_app()` 创建，并通过按业务域划分的 
 
 MySQL 初始化和历史租户迁移 SQL 已集中在 `backend/data/mysql/mysql_all.sql`。新部署只需执行文件中的“新库初始化”部分；已经完成租户迁移的现有数据库无需重跑历史迁移部分。执行前，将初始化部分两处 `REPLACE_WITH_A_LONG_RANDOM_PASSWORD` 换成同一个强密码。然后把以下设置追加到项目根目录 `.env`，并填同一应用密码和服务器提供的可信 CA PEM 路径：
 
+文档切片及向量在 Elasticsearch 中，使用 ES 8.x 或兼容版本。首次写入时系统会按当前 embedding 模型的输出维度自动创建索引；切换到不同维度的 embedding 模型时，应换一个 `ELASTICSEARCH_INDEX` 并重新索引文档。
+
 运行 MySQL 初始化工具：
 
 ```bash
@@ -120,6 +131,18 @@ MYSQL_SSL_CA=/path/to/mysql-ca.pem
 ```
 
 应用账号要求 TLS；建议将 SQL 中的 `'rag_app'@'%'` 限制为后端服务器的固定来源 IP。
+
+#### 从 MySQL chunks 迁移到 Elasticsearch
+
+部署新版前先备份数据库，并在 `.env` 中同时配置现有 MySQL 和 Elasticsearch。切换代码后执行：
+
+```bash
+cd backend
+pip install -r requirements.txt
+python -m ops.migrate_chunks_to_es
+```
+
+迁移脚本可重复运行，会按原切片 ID 幂等写入 ES；旧数据库中没有 embedding 的切片会用当前模型重新生成。确认 ES 数据和检索正常后，如需从 MySQL 删除旧 `chunks` 表，再执行 `python -m ops.migrate_chunks_to_es --drop-mysql-chunks`。新安装的 MySQL schema 不再创建该表。
 
 ### 4. 前端（开发 / 构建）
 
@@ -153,5 +176,5 @@ npm run build          # 构建到 frontend/dist，由后端静态托管
 ## 常见问题
 
 - **上传报「EMBEDDING_API_KEY 未配置」**：`.env` 中未填向量供应商的 key（DeepSeek 不提供 embedding）。
-- **想换检索供应商**：改 `.env` 里 `EMBEDDING_*` 三项即可；换模型后需删除 `backend/data/app.db` 重新上传文档以重建向量。
+- **想换检索供应商**：改 `.env` 里 `EMBEDDING_*` 三项即可；换成不同向量维度的模型时，配置新的 `ELASTICSEARCH_INDEX` 并重新上传或迁移文档以重建向量。
 - **端口**：生产可改回 80（需 root）；本地开发建议 8000。
