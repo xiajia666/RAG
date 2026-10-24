@@ -34,7 +34,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
   const [fileIndex, setFileIndex] = useState(0)
   const [phase, setPhase] = useState<Phase>('choice')
   const [preAnalyze, setPreAnalyze] = useState(false)
-  const [chunkMethod, setChunkMethod] = useState<ChunkMethod>('general')
+  const [chunkMethods, setChunkMethods] = useState<ChunkMethod[]>(['general'])
   const [analysis, setAnalysis] = useState<ChunkAnalysis | null>(null)
   const [preview, setPreview] = useState<ChunkPreview | null>(null)
   const [previewedStrategy, setPreviewedStrategy] = useState('')
@@ -53,7 +53,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setFileIndex(index => index + 1)
     setPhase('choice')
     setPreAnalyze(false)
-    setChunkMethod('general')
+    setChunkMethods(['general'])
     setAnalysis(null)
     setPreview(null)
     setPreviewedStrategy('')
@@ -75,7 +75,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setPhase('analyzing')
     setError('')
     try {
-      const result = await analyzeDocument(kbId, file, chunkMethod)
+      const result = await analyzeDocument(kbId, file, chunkMethods)
       setAnalysis(result)
       setPreview({ estimated_chunk_count: result.estimated_chunk_count, preview: result.preview, warnings: result.warnings })
       setPreviewedStrategy(JSON.stringify(result.strategy))
@@ -107,7 +107,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
   function returnToChoice() {
     setPhase('choice')
     setPreAnalyze(false)
-    setChunkMethod('general')
+    setChunkMethods(['general'])
     setAnalysis(null)
     setPreview(null)
     setPreviewedStrategy('')
@@ -122,7 +122,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setError('')
     try {
       if (!analysis?.analysis_id) throw new Error('分析结果缺少临时任务编号，请重新分析')
-      await confirmAnalyzedDocument(kbId, analysis.analysis_id, chunkMethod, strategy)
+      await confirmAnalyzedDocument(kbId, analysis.analysis_id, chunkMethods, strategy)
       if (isLast) await finish()
       else advanceToNext()
     } catch (reason) {
@@ -136,7 +136,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setPhase('previewing')
     setPreviewError('')
     try {
-      const result = await previewDocumentChunks(kbId, analysis.analysis_id, chunkMethod, strategy)
+      const result = await previewDocumentChunks(kbId, analysis.analysis_id, chunkMethods, strategy)
       setPreview(result)
       setPreviewedStrategy(JSON.stringify(strategy))
       setPhase('ready')
@@ -192,15 +192,15 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
             <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h4 className="text-sm font-semibold">内容类型模板</h4>
-                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-3)' }}>选择最接近文档内容的类型</p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-3)' }}>可多选适合这份文档的内容类型</p>
               </div>
-              {preAnalyze && <span className="text-xs" style={{ color: 'var(--color-cyan)' }}>当前选择：{CHUNK_METHODS.find(method => method.id === chunkMethod)?.name}</span>}
+              {preAnalyze && <span className="text-xs" style={{ color: 'var(--color-cyan)' }}>已选 {chunkMethods.length} 种</span>}
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {CHUNK_METHODS.map(method => {
-                const active = chunkMethod === method.id
-                return <button key={method.id} type="button" disabled={!preAnalyze} aria-pressed={active} onClick={() => setChunkMethod(method.id)} className="rounded-xl p-3.5 text-left transition-colors" style={{ background: active && preAnalyze ? 'var(--color-cyan-dim)' : 'var(--color-surface-2)', border: `1px solid ${active && preAnalyze ? 'var(--color-cyan)' : 'var(--color-border)'}`, opacity: preAnalyze ? 1 : .5, cursor: preAnalyze ? 'pointer' : 'not-allowed' }}>
-                  <span className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{method.name}</span>{active && preAnalyze && <span className="text-[11px]" style={{ color: 'var(--color-cyan)' }}>已选</span>}</span>
+                const active = chunkMethods.includes(method.id)
+                return <button key={method.id} type="button" disabled={!preAnalyze} aria-pressed={active} onClick={() => setChunkMethods(current => active ? (current.length > 1 ? current.filter(item => item !== method.id) : current) : [...current, method.id])} className="rounded-xl p-3.5 text-left transition-colors" style={{ background: active && preAnalyze ? 'var(--color-cyan-dim)' : 'var(--color-surface-2)', border: `1px solid ${active && preAnalyze ? 'var(--color-cyan)' : 'var(--color-border)'}`, opacity: preAnalyze ? 1 : .5, cursor: preAnalyze ? 'pointer' : 'not-allowed' }}>
+                  <span className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{method.name}</span><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px]" style={{ borderColor: active && preAnalyze ? 'var(--color-cyan)' : 'var(--color-border)', background: active && preAnalyze ? 'var(--color-cyan)' : 'transparent', color: active && preAnalyze ? 'var(--color-text-inv)' : 'transparent' }} aria-hidden="true">✓</span></span>
                   <span className="mt-1.5 block text-xs leading-5" style={{ color: 'var(--color-text-2)' }}>{method.description}</span>
                   <span className="mt-2 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>适用：{method.fit}</span>
                 </button>
