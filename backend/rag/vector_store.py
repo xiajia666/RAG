@@ -18,7 +18,7 @@ def _get_client():
             options["api_key"] = config.ELASTICSEARCH_API_KEY
         elif config.ELASTICSEARCH_USERNAME:
             options["basic_auth"] = (config.ELASTICSEARCH_USERNAME, config.ELASTICSEARCH_PASSWORD)
-        _client = Elasticsearch(**options)
+        _client = Elasticsearch(request_timeout=60, **options)
     return _client
 
 
@@ -50,7 +50,7 @@ def _ensure_index(vector_size):
     )
 
 
-def _index_chunks(records, refresh="wait_for"):
+def _index_chunks(records, refresh=True):
     records = list(records)
     if not records:
         return 0
