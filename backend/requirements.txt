@@ -9,7 +9,7 @@ PyMuPDF>=1.24
 python-docx>=1.1
 PyMySQL>=1.1
 SQLAlchemy>=2.0
-elasticsearch>=8.12,<10
+elasticsearch>=8.12,<9
 
 # DeepDoc 深度 PDF 解析（版面分析 + OCR + 表格结构）
 onnxruntime>=1.17
