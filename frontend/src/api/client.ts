@@ -1,4 +1,4 @@
-import type { Document, StreamMeta } from './types'
+import type { Document, DocumentMetrics, StreamMeta } from './types'
 
 const TOKEN_KEY = 'rag_token'
 
@@ -169,6 +169,10 @@ export async function reparseDocument(
   return api.post<{ document: Document; chunk_count: number }>(`/api/documents/${docId}/parse`, {
     parse_method: parseMethod,
   })
+}
+
+export async function documentSizeIndexAnalyse(docId: string): Promise<DocumentMetrics> {
+  return api.get<DocumentMetrics>(`/api/documents/${docId}/document_size_index_analyse`)
 }
 
 export async function downloadDocument(docId: string, filename: string): Promise<void> {

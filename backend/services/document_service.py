@@ -3,8 +3,7 @@ import os
 import uuid
 
 from core import config
-from rag import parsing
-from rag import vector_store
+from rag import analysis, parsing, vector_store
 from repositories import document_repository
 
 
@@ -123,3 +122,26 @@ def reparse_document(tenant_id: str, doc_id: str, parse_method: str = "plain") -
     vector_store.delete_document(tenant_id, doc_id)
     chunk_count = vector_store.index_document(tenant_id, doc_id, doc["kb_id"], doc["filename"], text)
     return {"document": document_repository.get_document(tenant_id, doc_id), "chunk_count": chunk_count}
+
+
+def document_size_index_analyse(tenant_id: str, doc_id: str) -> dict:
+    """读取原始文件并计算「文档规模指标」（只读，不修改索引）。"""
+    doc = document_repository.get_document(tenant_id, doc_id)
+    if not doc:
+        raise DocumentIngestionError("文档不存在", 404)
+
+    path = next((candidate for candidate in (
+        original_path(tenant_id, doc_id, doc["filename"]),
+        os.path.join(config.DOCUMENTS_DIR, f"{doc_id}_{doc['filename']}"),
+    ) if os.path.isfile(candidate)), None)
+    if not path:
+        raise DocumentIngestionError("原始文件不存在，无法分析", 404)
+    with open(path, "rb") as uploaded_file:
+        data = uploaded_file.read()
+
+    try:
+        text = (parsing.extract_text(doc["filename"], data) or "").strip()
+    except Exception as exc:
+        raise DocumentIngestionError(f"解析文件失败：{exc}") from exc
+
+    return analysis.compute_document_size_index(doc["filename"], data, text)

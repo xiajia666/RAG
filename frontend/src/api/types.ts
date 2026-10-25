@@ -30,6 +30,23 @@ export interface Document {
   created_at: string
 }
 
+export interface DocumentMetrics {
+  filename: string
+  page_count: number
+  char_count: number
+  estimated_tokens: number
+  avg_tokens_per_page: number
+  max_tokens_per_page: number
+  min_tokens_per_page: number
+  blank_page_count: number
+  blank_page_ratio: number
+  short_element_ratio: number
+  long_element_ratio: number
+  total_elements: number
+  short_element_count: number
+  long_element_count: number
+}
+
 export interface Session {
   id: string
   title: string

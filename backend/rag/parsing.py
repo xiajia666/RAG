@@ -27,16 +27,16 @@ def _decode_text(data):
 
 
 def _extract_pdf(data):
-    from pypdf import PdfReader
+    try:
+        import pymupdf as fitz
+    except ImportError:  # PyMuPDF < 1.24 仍用 fitz 作为模块名
+        import fitz
 
-    reader = PdfReader(io.BytesIO(data))
-    pages = []
-    for page in reader.pages:
-        try:
-            pages.append(page.extract_text() or "")
-        except Exception:
-            pages.append("")
-    return "\n".join(pages)
+    doc = fitz.open(stream=data, filetype="pdf")
+    try:
+        return "\n".join(page.get_text("text") or "" for page in doc)
+    finally:
+        doc.close()
 
 
 def _extract_docx(data):

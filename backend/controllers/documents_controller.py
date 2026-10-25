@@ -105,3 +105,16 @@ def parse_document(doc_id: str, req: DocumentParseRequest, user=CurrentUser()):
         return document_service.reparse_document(user["tenant_id"], doc_id, req.parse_method)
     except document_service.DocumentIngestionError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+# 文档规模指标：计算用于分块策略推荐的文档规模指标（只读）。
+@api.get('/api/documents/{doc_id}/document_size_index_analyse')
+def document_size_index_analyse(doc_id: str, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user)
+    try:
+        return document_service.document_size_index_analyse(user["tenant_id"], doc_id)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
