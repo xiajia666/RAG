@@ -22,3 +22,6 @@ backend/data/sessions/
 # 前端
 frontend/node_modules/
 frontend/dist/
+
+# DeepDoc 模型权重（体积较大，从外部拷贝/下载）
+backend/rag/parse_model/

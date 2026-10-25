@@ -75,3 +75,14 @@ JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "168"))  # 7 天
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "400"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "4"))
+
+# ---------- DeepDoc 深度 PDF 解析（版面分析 + OCR + 表格结构） ----------
+# 模型权重（det.ort / rec.ort / layout.ort / tsr.ort / ocr.res）所在目录。
+# 默认放在 backend/rag/parse_model，也可通过环境变量指向其它目录。
+DEEP_DOC_MODEL_DIR = os.getenv(
+    "DEEP_DOC_MODEL_DIR",
+    os.path.join(BACKEND_DIR, "rag", "parse_model"),
+).strip()
+# 是否用 DeepDoc 解析 PDF（需要 onnxruntime/opencv/pyclipper/PyMuPDF 与模型权重）。
+# 关闭或模型缺失时回退到 pypdf 文本层抽取。
+DEEP_DOC_ENABLED = os.getenv("DEEP_DOC_ENABLED", "false").strip().lower() in ("1", "true", "yes")
