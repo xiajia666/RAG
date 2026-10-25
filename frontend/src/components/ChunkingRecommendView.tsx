@@ -18,6 +18,11 @@ const STRATEGY_LABELS: Record<string, string> = {
   contract_aware: '条款感知', paper_aware: '论文结构', one: '整篇',
 }
 
+const ELEMENT_TYPE_LABELS: Record<string, string> = {
+  code: '代码', table: '表格', image: '图片', figure: '图片', heading: '标题',
+  list: '列表', contract: '条款', qa: '问答', paper: '论文',
+}
+
 const REASON_KEY_LABELS: Record<string, string> = {
   chunk_size: '分块大小', overlap_percent: '重叠', separators: '分隔符', top_k: 'TopK',
   strategy: '策略', table_window_tokens: '表格上下文', image_window_tokens: '图片上下文',
@@ -120,13 +125,13 @@ function RecommendDisplay({ recommend }: { recommend: ChunkingRecommendation }) 
       )}
 
       <section className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-        <h4 className="mb-2 text-sm font-semibold">分块策略</h4>
+        <h4 className="mb-2 whitespace-nowrap text-sm font-semibold">分块策略</h4>
         {strategy.primary && <Row label="主策略" value={label(STRATEGY_LABELS, strategy.primary)} />}
-        {elements.map(([key, value]) => <Row key={key} label={`${label(STRATEGY_LABELS, key)} 处理`} value={label(STRATEGY_LABELS, value)} />)}
+        {elements.map(([key, value]) => <Row key={key} label={`${label(ELEMENT_TYPE_LABELS, key)} 处理`} value={label(STRATEGY_LABELS, value)} />)}
       </section>
 
       <section className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-        <h4 className="mb-2 text-sm font-semibold">分块参数</h4>
+        <h4 className="mb-2 whitespace-nowrap text-sm font-semibold">分块参数</h4>
         {chunking.size != null && <Row label="分块大小" value={`${chunking.size} ${chunking.size_unit || 'tokens'}`} />}
         {chunking.max_size != null && <Row label="最大分块" value={`${chunking.max_size} ${chunking.size_unit || 'tokens'}`} />}
         {chunking.overlap_percent != null && <Row label="重叠（Overlap）" value={`${chunking.overlap_percent}%`} />}
@@ -141,7 +146,7 @@ function RecommendDisplay({ recommend }: { recommend: ChunkingRecommendation }) 
       </section>
 
       <section className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-        <h4 className="mb-2 text-sm font-semibold">检索参数（TopK）</h4>
+        <h4 className="mb-2 whitespace-nowrap text-sm font-semibold">检索参数（TopK）</h4>
         {retrieval.candidate_top_k != null && <Row label="候选 TopK" value={retrieval.candidate_top_k} />}
         {retrieval.rerank_top_k != null && <Row label="重排 TopK" value={retrieval.rerank_top_k} />}
         {retrieval.final_context_k != null && <Row label="最终上下文 K" value={retrieval.final_context_k} />}
@@ -150,7 +155,7 @@ function RecommendDisplay({ recommend }: { recommend: ChunkingRecommendation }) 
 
       {(context.table_window_tokens != null || context.image_window_tokens != null) && (
         <section className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-          <h4 className="mb-2 text-sm font-semibold">表格 / 图片上下文窗口</h4>
+          <h4 className="mb-2 whitespace-nowrap text-sm font-semibold">表格 / 图片上下文窗口</h4>
           {context.table_window_tokens != null && <Row label="表格上下文" value={`${context.table_window_tokens} tokens`} />}
           {context.image_window_tokens != null && <Row label="图片上下文" value={`${context.image_window_tokens} tokens`} />}
         </section>
@@ -158,7 +163,7 @@ function RecommendDisplay({ recommend }: { recommend: ChunkingRecommendation }) 
 
       {Object.keys(reasons).length > 0 && (
         <section className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-          <h4 className="mb-2 text-sm font-semibold">参数理由</h4>
+          <h4 className="mb-2 whitespace-nowrap text-sm font-semibold">参数理由</h4>
           {Object.entries(reasons).map(([key, value]) => (
             <div key={key} className="mb-2">
               <span className="text-xs font-medium" style={{ color: 'var(--color-cyan)' }}>{label(REASON_KEY_LABELS, key)}</span>
@@ -185,8 +190,8 @@ function RecommendDisplay({ recommend }: { recommend: ChunkingRecommendation }) 
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="mb-1.5 flex items-center justify-between gap-3">
-      <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>{label}</span>
-      <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{value}</span>
+      <span className="shrink-0 whitespace-nowrap text-xs" style={{ color: 'var(--color-text-3)' }}>{label}</span>
+      <span className="whitespace-nowrap text-sm font-medium" style={{ color: 'var(--color-text)' }}>{value}</span>
     </div>
   )
 }
