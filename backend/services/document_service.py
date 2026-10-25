@@ -3,7 +3,7 @@ import os
 import uuid
 
 from core import config
-from rag import analysis, parsing, vector_store
+from rag import analysis, parsing, recommend, vector_store
 from repositories import document_repository
 
 
@@ -167,3 +167,10 @@ def content_type_index_analyse(tenant_id: str, doc_id: str) -> dict:
     doc, data = _read_document(tenant_id, doc_id)
     text = _extract_text(doc, data)
     return analysis.compute_content_type_index(doc["filename"], data, text)
+
+
+def chunking_recommend(tenant_id: str, doc_id: str) -> dict:
+    """基于评估 skill 与文档指标，调用 LLM 生成分块策略推荐。"""
+    doc, data = _read_document(tenant_id, doc_id)
+    text = _extract_text(doc, data)
+    return recommend.recommend_chunking(doc, data, text)

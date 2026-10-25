@@ -144,3 +144,16 @@ def content_type_index_analyse(doc_id: str, user=CurrentUser()):
         return document_service.content_type_index_analyse(user["tenant_id"], doc_id)
     except document_service.DocumentIngestionError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+# AI 分块策略推荐：基于评估 skill + 文档指标，调用 LLM 生成分块参数推荐。
+@api.post('/api/documents/{doc_id}/chunking_recommend')
+def chunking_recommend(doc_id: str, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user)
+    try:
+        return document_service.chunking_recommend(user["tenant_id"], doc_id)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc

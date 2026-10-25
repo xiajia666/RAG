@@ -1,4 +1,4 @@
-import type { ContentTypeMetrics, Document, DocumentMetrics, StreamMeta, StructureMetrics } from './types'
+import type { ChunkingRecommendation, ContentTypeMetrics, Document, DocumentMetrics, StreamMeta, StructureMetrics } from './types'
 
 const TOKEN_KEY = 'rag_token'
 
@@ -181,6 +181,10 @@ export async function structureIndexAnalyse(docId: string): Promise<StructureMet
 
 export async function contentTypeIndexAnalyse(docId: string): Promise<ContentTypeMetrics> {
   return api.get<ContentTypeMetrics>(`/api/documents/${docId}/content_type_index_analyse`)
+}
+
+export async function chunkingRecommend(docId: string): Promise<ChunkingRecommendation> {
+  return api.post<ChunkingRecommendation>(`/api/documents/${docId}/chunking_recommend`)
 }
 
 export async function downloadDocument(docId: string, filename: string): Promise<void> {

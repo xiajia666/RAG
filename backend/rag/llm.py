@@ -31,3 +31,14 @@ def chat_stream(messages):
         delta = chunk.choices[0].delta
         if delta and delta.content:
             yield delta.content
+
+
+def chat(messages, temperature=0.2, max_tokens=4096):
+    """非流式对话，返回完整文本。"""
+    resp = get_client().chat.completions.create(
+        model=config.DEEPSEEK_MODEL,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return resp.choices[0].message.content or ""

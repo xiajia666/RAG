@@ -86,6 +86,33 @@ export interface ContentTypeMetrics {
   page_count: number
 }
 
+export interface ChunkingRecommendation {
+  schema_version?: string
+  rule_version?: string
+  status?: string
+  strategy?: { primary?: string; elements?: Record<string, string> }
+  chunking?: {
+    size?: number
+    size_unit?: string
+    max_size?: number
+    overlap_percent?: number
+    separators?: string[]
+    respect_heading_boundaries?: boolean
+    preserve_qa_pairs?: boolean
+    preserve_code_blocks?: boolean
+    preserve_table_headers?: boolean
+    preserve_image_caption_relation?: boolean
+  }
+  context?: { table_window_tokens?: number; image_window_tokens?: number; include_heading_path?: boolean; include_source_metadata?: boolean }
+  retrieval?: { candidate_top_k?: number; rerank_top_k?: number; final_context_k?: number; basis?: string; enable_reranking?: boolean }
+  preprocessing?: { remove_headers_footers?: boolean; header_footer_removal_mode?: string; require_source_mapping?: boolean }
+  validation?: Record<string, unknown>
+  parameter_reasons?: Record<string, string[]>
+  warnings?: string[]
+  error?: string
+  raw?: string
+}
+
 export interface Session {
   id: string
   title: string

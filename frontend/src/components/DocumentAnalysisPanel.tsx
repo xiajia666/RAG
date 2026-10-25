@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { documentSizeIndexAnalyse, structureIndexAnalyse, contentTypeIndexAnalyse } from '../api/client'
+import ChunkingRecommendView from './ChunkingRecommendView'
 
 interface Props {
   docId: string
@@ -12,6 +13,7 @@ const CATEGORIES = [
   { id: 'scale', name: '文档规模指标' },
   { id: 'structure', name: '结构化程度指标' },
   { id: 'content_type', name: '内容类型分布' },
+  { id: 'ai_recommend', name: 'AI 分块策略推荐' },
 ]
 
 interface MetricMeta {
@@ -93,6 +95,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
   }
 
   useEffect(() => {
+    if (active === 'ai_recommend') return
     let alive = true
     setLoading(true)
     setError('')
@@ -124,6 +127,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
         </nav>
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-5">
+          {active === 'ai_recommend' ? <ChunkingRecommendView docId={docId} /> : <>
           {loading && <div className="flex min-h-48 flex-col items-center justify-center text-center"><span className="mb-3 h-8 w-8 animate-spin rounded-full border-2 border-current border-r-transparent" style={{ color: 'var(--color-cyan)' }} /><p className="text-sm" style={{ color: 'var(--color-text-3)' }}>正在计算指标…</p></div>}
           {!loading && error && <p className="py-10 text-center text-sm" style={{ color: 'var(--color-red)' }}>{error}</p>}
           {!loading && !error && metrics && group && (
@@ -152,6 +156,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
               <p className="mt-4 text-[11px] leading-5" style={{ color: 'var(--color-text-3)' }}>{CATEGORY_HINTS[active]}</p>
             </>
           )}
+          </>}
         </div>
       </section>
     </div>
