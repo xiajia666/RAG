@@ -120,9 +120,9 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
           <button onClick={onClose} className="shrink-0 text-sm" style={{ color: 'var(--color-text-3)' }}>关闭</button>
         </header>
 
-        <nav className="flex gap-1 border-b px-4 py-2" style={{ borderColor: 'var(--color-border)' }}>
+        <nav className="flex flex-wrap gap-1 border-b px-4 py-2" style={{ borderColor: 'var(--color-border)' }}>
           {CATEGORIES.map(cat => (
-            <button key={cat.id} onClick={() => { if (cat.id === active) return; setActive(cat.id); setHovered(null); setMetrics(null); setLoading(true) }} className="rounded-lg px-3 py-1.5 text-sm font-medium" style={active === cat.id ? { color: 'var(--color-text-inv)', background: 'var(--color-cyan)' } : { color: 'var(--color-text-2)' }}>{cat.name}</button>
+            <button key={cat.id} onClick={() => { if (cat.id === active) return; setActive(cat.id); setHovered(null); setMetrics(null); setLoading(true) }} className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium" style={active === cat.id ? { color: 'var(--color-text-inv)', background: 'var(--color-cyan)' } : { color: 'var(--color-text-2)' }}>{cat.name}</button>
           ))}
         </nav>
 
