@@ -122,7 +122,10 @@ def reparse_document(tenant_id: str, doc_id: str, parse_method: str = "plain") -
     # 清除旧索引与旧分析缓存后重建
     document_repository.delete_analyses(tenant_id, doc_id)
     vector_store.delete_document(tenant_id, doc_id)
-    chunk_count = vector_store.index_document(tenant_id, doc_id, doc["kb_id"], doc["filename"], text)
+    try:
+        chunk_count = vector_store.index_document(tenant_id, doc_id, doc["kb_id"], doc["filename"], text)
+    except Exception as exc:
+        raise DocumentIngestionError(f"向量化失败：{exc}", 500) from exc
     return {"document": document_repository.get_document(tenant_id, doc_id), "chunk_count": chunk_count}
 
 
