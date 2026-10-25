@@ -1,4 +1,5 @@
 """Document ingestion orchestration, independent of Flask request objects."""
+import json
 import os
 import uuid
 
@@ -118,7 +119,8 @@ def reparse_document(tenant_id: str, doc_id: str, parse_method: str = "plain") -
     if not text:
         raise DocumentIngestionError("未能从文件中提取到文本（可能是扫描版 PDF）")
 
-    # 清除旧索引后重建
+    # 清除旧索引与旧分析缓存后重建
+    document_repository.delete_analyses(tenant_id, doc_id)
     vector_store.delete_document(tenant_id, doc_id)
     chunk_count = vector_store.index_document(tenant_id, doc_id, doc["kb_id"], doc["filename"], text)
     return {"document": document_repository.get_document(tenant_id, doc_id), "chunk_count": chunk_count}
@@ -148,29 +150,72 @@ def _extract_text(doc: dict, data: bytes) -> str:
         raise DocumentIngestionError(f"解析文件失败：{exc}") from exc
 
 
+# 四类分析结果的分类键与对应计算函数。
+_ANALYSIS_COMPUTE = {
+    "document_size_index": analysis.compute_document_size_index,
+    "structure_index": analysis.compute_structure_index,
+    "content_type_index": analysis.compute_content_type_index,
+}
+
+
+def _cached_analysis(tenant_id: str, doc_id: str, category: str):
+    """读取已缓存的分析结果；无缓存或解析失败时返回 None。"""
+    raw = document_repository.get_analysis(tenant_id, doc_id, category)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_analysis(tenant_id: str, doc_id: str, doc: dict, data: bytes, text: str, category: str) -> dict:
+    """计算指标并写入缓存。"""
+    result = _ANALYSIS_COMPUTE[category](doc["filename"], data, text)
+    document_repository.save_analysis(tenant_id, doc_id, category, json.dumps(result, ensure_ascii=False))
+    return result
+
+
 def document_size_index_analyse(tenant_id: str, doc_id: str) -> dict:
-    """读取原始文件并计算「文档规模指标」（只读，不修改索引）。"""
+    """读取「文档规模指标」，优先取缓存，无缓存时计算并写入。"""
+    cached = _cached_analysis(tenant_id, doc_id, "document_size_index")
+    if cached is not None:
+        return cached
     doc, data = _read_document(tenant_id, doc_id)
     text = _extract_text(doc, data)
-    return analysis.compute_document_size_index(doc["filename"], data, text)
+    return _compute_analysis(tenant_id, doc_id, doc, data, text, "document_size_index")
 
 
 def structure_index_analyse(tenant_id: str, doc_id: str) -> dict:
-    """读取原始文件并计算「结构化程度指标」（只读，不修改索引）。"""
+    """读取「结构化程度指标」，优先取缓存，无缓存时计算并写入。"""
+    cached = _cached_analysis(tenant_id, doc_id, "structure_index")
+    if cached is not None:
+        return cached
     doc, data = _read_document(tenant_id, doc_id)
     text = _extract_text(doc, data)
-    return analysis.compute_structure_index(doc["filename"], data, text)
+    return _compute_analysis(tenant_id, doc_id, doc, data, text, "structure_index")
 
 
 def content_type_index_analyse(tenant_id: str, doc_id: str) -> dict:
-    """读取原始文件并计算「内容类型分布指标」（只读，不修改索引）。"""
+    """读取「内容类型分布指标」，优先取缓存，无缓存时计算并写入。"""
+    cached = _cached_analysis(tenant_id, doc_id, "content_type_index")
+    if cached is not None:
+        return cached
     doc, data = _read_document(tenant_id, doc_id)
     text = _extract_text(doc, data)
-    return analysis.compute_content_type_index(doc["filename"], data, text)
+    return _compute_analysis(tenant_id, doc_id, doc, data, text, "content_type_index")
 
 
 def chunking_recommend(tenant_id: str, doc_id: str) -> dict:
-    """基于评估 skill 与文档指标，调用 LLM 生成分块策略推荐。"""
+    """读取「AI 分块策略推荐」，优先取缓存；无缓存时调 LLM 生成并缓存（失败不缓存）。"""
+    cached = _cached_analysis(tenant_id, doc_id, "chunking_recommend")
+    if cached is not None:
+        return cached
     doc, data = _read_document(tenant_id, doc_id)
     text = _extract_text(doc, data)
-    return recommend.recommend_chunking(doc, data, text)
+    result = recommend.recommend_chunking(doc, data, text)
+    if isinstance(result, dict) and not result.get("error"):
+        document_repository.save_analysis(
+            tenant_id, doc_id, "chunking_recommend", json.dumps(result, ensure_ascii=False)
+        )
+    return result
