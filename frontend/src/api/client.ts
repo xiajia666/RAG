@@ -162,6 +162,15 @@ export async function uploadDocument(
   return postForm(`/api/kbs/${kbId}/documents`, form)
 }
 
+export async function reparseDocument(
+  docId: string,
+  parseMethod: ParseMethod,
+): Promise<{ document: Document; chunk_count: number }> {
+  return api.post<{ document: Document; chunk_count: number }>(`/api/documents/${docId}/parse`, {
+    parse_method: parseMethod,
+  })
+}
+
 export async function downloadDocument(docId: string, filename: string): Promise<void> {
   const headers: Record<string, string> = {}
   const token = getToken()

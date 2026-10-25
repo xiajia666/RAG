@@ -90,3 +90,36 @@ def ingest_document(tenant_id: str, kb_id: str, original_filename: str, data: by
         raise DocumentIngestionError(f"向量化失败：{exc}", 500) from exc
 
     return {"document": document_repository.get_document(tenant_id, doc_id), "chunk_count": chunk_count}
+
+
+def reparse_document(tenant_id: str, doc_id: str, parse_method: str = "plain") -> dict:
+    """重新解析一份已上传文档（用于对「仅上传不解析」的文档补解析，或更换解析方式）。"""
+    doc = document_repository.get_document(tenant_id, doc_id)
+    if not doc:
+        raise DocumentIngestionError("文档不存在", 404)
+
+    parse_method = (parse_method or "plain").strip().lower()
+    if parse_method == "deepdoc":
+        raise DocumentIngestionError("DeepDocs 解析功能即将上线，暂未开放", 501)
+    if parse_method != "plain":
+        raise DocumentIngestionError("不支持的解析方式")
+
+    # 读取原始文件（兼容新旧两套文件命名）
+    path = next((candidate for candidate in (
+        original_path(tenant_id, doc_id, doc["filename"]),
+        os.path.join(config.DOCUMENTS_DIR, f"{doc_id}_{doc['filename']}"),
+    ) if os.path.isfile(candidate)), None)
+    if not path:
+        raise DocumentIngestionError("原始文件不存在，无法解析", 404)
+    with open(path, "rb") as uploaded_file:
+        data = uploaded_file.read()
+
+    # 先解析，失败时保留旧索引
+    text = (parsing.extract_text(doc["filename"], data) or "").strip()
+    if not text:
+        raise DocumentIngestionError("未能从文件中提取到文本（可能是扫描版 PDF）")
+
+    # 清除旧索引后重建
+    vector_store.delete_document(tenant_id, doc_id)
+    chunk_count = vector_store.index_document(tenant_id, doc_id, doc["kb_id"], doc["filename"], text)
+    return {"document": document_repository.get_document(tenant_id, doc_id), "chunk_count": chunk_count}

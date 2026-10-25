@@ -9,7 +9,7 @@ from rag import vector_store
 from security import authentication as auth
 from controllers.common import accessible_kb_ids, get_kb_for_user
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from core.schemas import BulkDocumentDelete
+from core.schemas import BulkDocumentDelete, DocumentParseRequest
 from services import document_service
 
 # 查询当前用户有权访问的全部文档。
@@ -92,3 +92,16 @@ def delete_document(doc_id: str, user=CurrentUser()):
     db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
     document_service.remove_original_file(user["tenant_id"], doc_id, doc["filename"])
     return {"deleted": True}
+
+
+# 重新解析指定文档（用于对「仅上传不解析」的文档补解析，或更换解析方式）。
+@api.post('/api/documents/{doc_id}/parse')
+def parse_document(doc_id: str, req: DocumentParseRequest, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user, write=True)
+    try:
+        return document_service.reparse_document(user["tenant_id"], doc_id, req.parse_method)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc

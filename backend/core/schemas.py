@@ -55,6 +55,10 @@ class BulkDocumentDelete(BaseModel):
     document_ids: list[str]
 
 
+class DocumentParseRequest(BaseModel):
+    parse_method: str = "plain"
+
+
 class InviteRequest(BaseModel):
     email: str
     role: Optional[str] = "user"
