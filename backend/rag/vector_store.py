@@ -165,46 +165,55 @@ def search(tenant_id, kb_id, query, top_k=None):
 
 def get_document_chunks(tenant_id, doc_id, limit=5):
     """Fetch a small ordered chunk preview from Elasticsearch."""
-    if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
+    try:
+        if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
+            return []
+        response = _get_client().search(
+            index=config.ELASTICSEARCH_INDEX,
+            query={"bool": {"filter": [
+                {"term": {"tenant_id": tenant_id}},
+                {"term": {"doc_id": doc_id}},
+            ]}},
+            size=limit,
+            sort=[{"chunk_index": "asc"}],
+            source=["chunk_index", "content", "created_at"],
+        )
+        return [hit["_source"] for hit in response["hits"]["hits"]]
+    except Exception:
         return []
-    response = _get_client().search(
-        index=config.ELASTICSEARCH_INDEX,
-        query={"bool": {"filter": [
-            {"term": {"tenant_id": tenant_id}},
-            {"term": {"doc_id": doc_id}},
-        ]}},
-        size=limit,
-        sort=[{"chunk_index": "asc"}],
-        source=["chunk_index", "content", "created_at"],
-    )
-    return [hit["_source"] for hit in response["hits"]["hits"]]
 
 
 def delete_document(tenant_id, doc_id):
     """Remove all Elasticsearch chunks belonging to one tenant document."""
-    if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
-        return
-    _get_client().delete_by_query(
-        index=config.ELASTICSEARCH_INDEX,
-        query={"bool": {"filter": [
-            {"term": {"tenant_id": tenant_id}},
-            {"term": {"doc_id": doc_id}},
-        ]}},
-        refresh=True,
-        conflicts="proceed",
-    )
+    try:
+        if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
+            return
+        _get_client().delete_by_query(
+            index=config.ELASTICSEARCH_INDEX,
+            query={"bool": {"filter": [
+                {"term": {"tenant_id": tenant_id}},
+                {"term": {"doc_id": doc_id}},
+            ]}},
+            refresh=True,
+            conflicts="proceed",
+        )
+    except Exception:
+        pass
 
 
 def delete_knowledge_base(tenant_id, kb_id):
     """Remove all Elasticsearch chunks belonging to one tenant knowledge base."""
-    if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
-        return
-    _get_client().delete_by_query(
-        index=config.ELASTICSEARCH_INDEX,
-        query={"bool": {"filter": [
-            {"term": {"tenant_id": tenant_id}},
-            {"term": {"kb_id": kb_id}},
-        ]}},
-        refresh=True,
-        conflicts="proceed",
-    )
+    try:
+        if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
+            return
+        _get_client().delete_by_query(
+            index=config.ELASTICSEARCH_INDEX,
+            query={"bool": {"filter": [
+                {"term": {"tenant_id": tenant_id}},
+                {"term": {"kb_id": kb_id}},
+            ]}},
+            refresh=True,
+            conflicts="proceed",
+        )
+    except Exception:
+        pass
