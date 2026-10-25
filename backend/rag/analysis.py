@@ -299,69 +299,19 @@ def _formula_tokens(lines) -> int:
     return tokens
 
 
-def _pdf_image_stats(data: bytes):
-    """PDF 图片统计，返回 (image_page_ratio, image_area_ratio)。"""
-    try:
-        doc = _open_pdf(data)
-        try:
-            total_pages = doc.page_count
-            image_pages = 0
-            image_area = 0.0
-            page_area_total = 0.0
-            for page in doc:
-                rect = page.rect
-                page_area_total += rect.width * rect.height
-                info = page.get_image_info(xrefs=True)
-                if info:
-                    image_pages += 1
-                    for img in info:
-                        bbox = img.get("bbox")
-                        if bbox:
-                            w = max(0.0, bbox[2] - bbox[0])
-                            h = max(0.0, bbox[3] - bbox[1])
-                            image_area += w * h
-        finally:
-            doc.close()
-        image_page_ratio = round(image_pages / total_pages, 4) if total_pages else 0.0
-        image_area_ratio = round(image_area / page_area_total, 4) if page_area_total else 0.0
-        return image_page_ratio, image_area_ratio
-    except Exception:
-        return 0.0, 0.0
-
-
-def _pdf_table_stats(data: bytes):
-    """PDF 表格统计，返回 (table_tokens, table_candidates, table_success)。"""
-    try:
-        doc = _open_pdf(data)
-        try:
-            table_tokens = 0
-            candidates = 0
-            success = 0
-            for page in doc:
-                for table in page.find_tables().tables:
-                    candidates += 1
-                    if table.row_count >= 2 and table.col_count >= 2:
-                        success += 1
-                    cell_text = page.get_text("text", clip=table.bbox) or ""
-                    table_tokens += estimate_tokens(cell_text)
-        finally:
-            doc.close()
-        return table_tokens, candidates, success
-    except Exception:
-        return 0, 0, 0
-
-
 def compute_content_type_index(filename: str, data: bytes, text: str) -> dict:
-    """计算内容类型分布指标。
+    """计算内容类型分布指标（含表格、代码、问答、公式、图片）。
 
-    指标（分母统一为「全部有效内容 Token」，表格文本已含于其中、不重复计入分母）：
-    - table_token_ratio            表格内容 Token / 全部内容 Token
-    - code_token_ratio             代码 Token / 全部内容 Token
-    - qa_pair_ratio                完整问答对覆盖 Token / 全部内容 Token
-    - image_page_ratio             含图片页数 / 总页数
-    - image_area_ratio             图片实例覆盖面积 / 页面总面积
-    - formula_ratio                公式 Token / 全部内容 Token
-    - table_structure_success_rate 成功恢复结构(≥2行≥2列)的表格 / 表格候选总数
+    指标（比例统一按 Token 口径）：
+    - table_token_ratio        表格内容 Token /（正文文本 Token + 表格文本 Token）
+    - table_recovery_rate      成功恢复结构(≥2行≥2列)的表格数 / 表格候选数
+    - table_avg_rows           成功恢复表格的平均行数
+    - code_token_ratio         代码 Token / 全部有效内容 Token
+    - qa_pair_ratio            完整问答对覆盖 Token / 全部内容 Token
+    - formula_ratio            公式 Token / 全部内容 Token
+    - image_count_per_page     图片实例数 / 页数
+    - image_page_coverage      图片区域并集面积 / 页面总面积
+    - image_semantic_coverage  有有效 OCR/视觉描述的图片数 / 图片总数（近似：图片区域内有文本层）
     """
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     total_tokens = estimate_tokens(text)
@@ -372,26 +322,41 @@ def compute_content_type_index(filename: str, data: bytes, text: str) -> dict:
     formula_tokens = _formula_tokens(lines)
 
     is_pdf = (filename or "").lower().endswith(".pdf")
-    image_page_ratio = 0.0
-    image_area_ratio = 0.0
-    pdf_table_tokens = 0
-    table_candidates = 0
-    table_success = 0
     if is_pdf:
-        image_page_ratio, image_area_ratio = _pdf_image_stats(data)
-        pdf_table_tokens, table_candidates, table_success = _pdf_table_stats(data)
-
-    table_tokens = pdf_table_tokens + md_table_tokens
+        stats = _pdf_table_image_stats(data)
+        table_tokens = stats["table_tokens"] + md_table_tokens
+        table_candidates = stats["table_candidates"]
+        table_success = stats["table_success"]
+        table_avg_rows = round(stats["table_success_rows"] / table_success, 2) if table_success else 0.0
+        page_count = stats["page_count"]
+        image_instances = stats["image_instances"]
+        image_total = stats["image_total"]
+        image_semantic = stats["image_semantic"]
+        image_union_area = stats["image_union_area"]
+        page_area_total = stats["page_area_total"]
+    else:
+        table_tokens = md_table_tokens
+        table_candidates = 0
+        table_success = 0
+        table_avg_rows = 0.0
+        page_count = max(1, round(len(_WS.sub("", text)) / CHARS_PER_PAGE))
+        image_instances = 0
+        image_total = 0
+        image_semantic = 0
+        image_union_area = 0.0
+        page_area_total = 0.0
 
     return {
         "filename": filename,
         "table_token_ratio": round(table_tokens / total_tokens, 4) if total_tokens else 0.0,
+        "table_recovery_rate": round(table_success / table_candidates, 4) if table_candidates else 0.0,
+        "table_avg_rows": table_avg_rows,
         "code_token_ratio": round(code_tokens / total_tokens, 4) if total_tokens else 0.0,
         "qa_pair_ratio": round(qa_pair_tokens / total_tokens, 4) if total_tokens else 0.0,
-        "image_page_ratio": image_page_ratio,
-        "image_area_ratio": image_area_ratio,
         "formula_ratio": round(formula_tokens / total_tokens, 4) if total_tokens else 0.0,
-        "table_structure_success_rate": round(table_success / table_candidates, 4) if table_candidates else 0.0,
+        "image_count_per_page": round(image_instances / page_count, 2) if page_count else 0.0,
+        "image_page_coverage": round(image_union_area / page_area_total, 4) if page_area_total else 0.0,
+        "image_semantic_coverage": round(image_semantic / image_total, 4) if image_total else 0.0,
         # 辅助字段
         "total_tokens": total_tokens,
         "table_tokens": table_tokens,
@@ -400,10 +365,14 @@ def compute_content_type_index(filename: str, data: bytes, text: str) -> dict:
         "formula_tokens": formula_tokens,
         "table_candidates": table_candidates,
         "table_success": table_success,
+        "image_instances": image_instances,
+        "image_total": image_total,
+        "image_semantic": image_semantic,
+        "page_count": page_count,
     }
 
 
-# ---------- 表格与图片指标 ----------
+# ---------- 内容类型分布：PDF 表格/图片统计助手 ----------
 
 def _rect_union_area(rects):
     """轴对齐矩形的并集面积（扫描线法）。rects 为 (x0, y0, x1, y1) 列表。"""
@@ -471,64 +440,3 @@ def _pdf_table_image_stats(data: bytes) -> dict:
     except Exception:
         pass
     return stats
-
-
-def compute_table_image_index(filename: str, data: bytes, text: str) -> dict:
-    """计算表格与图片指标。
-
-    指标：
-    - table_token_ratio       表格内容 Token /（正文文本 Token + 表格文本 Token）
-    - table_recovery_rate     成功恢复结构(≥2行≥2列)的表格数 / 表格候选数
-    - table_avg_rows          成功恢复表格的平均行数
-    - image_count_per_page    图片实例数 / 页数
-    - image_page_coverage     图片区域并集面积 / 页面总面积
-    - image_semantic_coverage 有有效 OCR/视觉描述的图片数 / 图片总数（近似：图片区域内有文本层）
-    """
-    total_tokens = estimate_tokens(text)
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    md_table_tokens = _markdown_table_tokens(lines)
-
-    is_pdf = (filename or "").lower().endswith(".pdf")
-    if is_pdf:
-        stats = _pdf_table_image_stats(data)
-        table_tokens = stats["table_tokens"] + md_table_tokens
-        candidates = stats["table_candidates"]
-        success = stats["table_success"]
-        avg_rows = round(stats["table_success_rows"] / success, 2) if success else 0.0
-        page_count = stats["page_count"]
-        image_instances = stats["image_instances"]
-        image_total = stats["image_total"]
-        image_semantic = stats["image_semantic"]
-        image_union_area = stats["image_union_area"]
-        page_area_total = stats["page_area_total"]
-    else:
-        table_tokens = md_table_tokens
-        candidates = 0
-        success = 0
-        avg_rows = 0.0
-        page_count = max(1, round(len(_WS.sub("", text)) / CHARS_PER_PAGE))
-        image_instances = 0
-        image_total = 0
-        image_semantic = 0
-        image_union_area = 0.0
-        page_area_total = 0.0
-
-    return {
-        "filename": filename,
-        "table_token_ratio": round(table_tokens / total_tokens, 4) if total_tokens else 0.0,
-        "table_recovery_rate": round(success / candidates, 4) if candidates else 0.0,
-        "table_avg_rows": avg_rows,
-        "image_count_per_page": round(image_instances / page_count, 2) if page_count else 0.0,
-        "image_page_coverage": round(image_union_area / page_area_total, 4) if page_area_total else 0.0,
-        "image_semantic_coverage": round(image_semantic / image_total, 4) if image_total else 0.0,
-        # 辅助字段
-        "total_tokens": total_tokens,
-        "body_tokens": max(0, total_tokens - table_tokens),
-        "table_tokens": table_tokens,
-        "table_candidates": candidates,
-        "table_success": success,
-        "image_instances": image_instances,
-        "image_total": image_total,
-        "image_semantic": image_semantic,
-        "page_count": page_count,
-    }

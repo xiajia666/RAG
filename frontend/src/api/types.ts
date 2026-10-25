@@ -65,32 +65,19 @@ export interface StructureMetrics {
 export interface ContentTypeMetrics {
   filename: string
   table_token_ratio: number
+  table_recovery_rate: number
+  table_avg_rows: number
   code_token_ratio: number
   qa_pair_ratio: number
-  image_page_ratio: number
-  image_area_ratio: number
   formula_ratio: number
-  table_structure_success_rate: number
+  image_count_per_page: number
+  image_page_coverage: number
+  image_semantic_coverage: number
   total_tokens: number
   table_tokens: number
   code_tokens: number
   qa_pair_tokens: number
   formula_tokens: number
-  table_candidates: number
-  table_success: number
-}
-
-export interface TableImageMetrics {
-  filename: string
-  table_token_ratio: number
-  table_recovery_rate: number
-  table_avg_rows: number
-  image_count_per_page: number
-  image_page_coverage: number
-  image_semantic_coverage: number
-  total_tokens: number
-  body_tokens: number
-  table_tokens: number
   table_candidates: number
   table_success: number
   image_instances: number

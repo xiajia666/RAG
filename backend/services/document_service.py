@@ -167,10 +167,3 @@ def content_type_index_analyse(tenant_id: str, doc_id: str) -> dict:
     doc, data = _read_document(tenant_id, doc_id)
     text = _extract_text(doc, data)
     return analysis.compute_content_type_index(doc["filename"], data, text)
-
-
-def table_image_index_analyse(tenant_id: str, doc_id: str) -> dict:
-    """读取原始文件并计算「表格与图片指标」（只读，不修改索引）。"""
-    doc, data = _read_document(tenant_id, doc_id)
-    text = _extract_text(doc, data)
-    return analysis.compute_table_image_index(doc["filename"], data, text)

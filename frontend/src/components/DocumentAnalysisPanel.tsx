@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
-import { documentSizeIndexAnalyse, structureIndexAnalyse, contentTypeIndexAnalyse, tableImageIndexAnalyse } from '../api/client'
+import { documentSizeIndexAnalyse, structureIndexAnalyse, contentTypeIndexAnalyse } from '../api/client'
 
 interface Props {
   docId: string
@@ -12,7 +12,6 @@ const CATEGORIES = [
   { id: 'scale', name: '文档规模指标' },
   { id: 'structure', name: '结构化程度指标' },
   { id: 'content_type', name: '内容类型分布' },
-  { id: 'table_image', name: '表格与图片指标' },
 ]
 
 interface MetricMeta {
@@ -45,19 +44,12 @@ const STRUCTURE_METRICS: MetricMeta[] = [
 ]
 
 const CONTENT_TYPE_METRICS: MetricMeta[] = [
-  { key: 'table_token_ratio', name: '表格 Token 占比', method: '表格内容 Token ÷ 全部有效内容 Token', purpose: '判断表格是否为主要内容', format: m => `${(m.table_token_ratio * 100).toFixed(1)}%` },
-  { key: 'code_token_ratio', name: '代码 Token 占比', method: '代码 Token ÷ 全部有效内容 Token', purpose: '判断是否需要代码感知分块', format: m => `${(m.code_token_ratio * 100).toFixed(1)}%` },
-  { key: 'qa_pair_ratio', name: '问答对占比', method: '完整问答对覆盖 Token ÷ 全部内容 Token', purpose: '判断是否适合 Q&A 模板', format: m => `${(m.qa_pair_ratio * 100).toFixed(1)}%` },
-  { key: 'image_page_ratio', name: '含图片页占比', method: '含图片页数 ÷ 总页数', purpose: '判断图片处理需求', format: m => `${(m.image_page_ratio * 100).toFixed(1)}%` },
-  { key: 'image_area_ratio', name: '图片面积占比', method: '图片实例覆盖面积 ÷ 页面总面积', purpose: '辅助识别扫描件、图表密集页', format: m => `${(m.image_area_ratio * 100).toFixed(2)}%` },
-  { key: 'formula_ratio', name: '公式占比', method: '公式 Token ÷ 全部内容 Token', purpose: '识别论文、技术文档', format: m => `${(m.formula_ratio * 100).toFixed(1)}%` },
-  { key: 'table_structure_success_rate', name: '表格结构成功率', method: '成功恢复结构(≥2行≥2列)的表格 ÷ 表格候选总数', purpose: '判断表格解析是否可靠', format: m => `${(m.table_structure_success_rate * 100).toFixed(1)}%` },
-]
-
-const TABLE_IMAGE_METRICS: MetricMeta[] = [
   { key: 'table_token_ratio', name: '表格 Token 占比', method: '表格内容 Token ÷（正文文本 Token + 表格文本 Token）', purpose: '判断表格是否占主体', format: m => `${(m.table_token_ratio * 100).toFixed(1)}%` },
   { key: 'table_recovery_rate', name: '表格结构恢复率', method: '成功恢复结构(≥2行≥2列)的表格数 ÷ 表格候选数', purpose: '判断表格解析质量', format: m => `${(m.table_recovery_rate * 100).toFixed(1)}%` },
   { key: 'table_avg_rows', name: '表格平均行数', method: '成功恢复表格的平均行数', purpose: '判断表格规模', format: m => `${m.table_avg_rows} 行` },
+  { key: 'code_token_ratio', name: '代码 Token 占比', method: '代码 Token ÷ 全部有效内容 Token', purpose: '判断是否需要代码感知分块', format: m => `${(m.code_token_ratio * 100).toFixed(1)}%` },
+  { key: 'qa_pair_ratio', name: '问答对占比', method: '完整问答对覆盖 Token ÷ 全部内容 Token', purpose: '判断是否适合 Q&A 模板', format: m => `${(m.qa_pair_ratio * 100).toFixed(1)}%` },
+  { key: 'formula_ratio', name: '公式占比', method: '公式 Token ÷ 全部内容 Token', purpose: '识别论文、技术文档', format: m => `${(m.formula_ratio * 100).toFixed(1)}%` },
   { key: 'image_count_per_page', name: '每页图片数', method: '图片实例数 ÷ 页数', purpose: '判断图片密度', format: m => m.image_count_per_page.toFixed(2) },
   { key: 'image_page_coverage', name: '图片覆盖面积占比', method: '图片区域并集面积 ÷ 页面总面积', purpose: '发现图像密集页面', format: m => `${(m.image_page_coverage * 100).toFixed(2)}%` },
   { key: 'image_semantic_coverage', name: '图片语义覆盖', method: '有有效 OCR 或视觉描述的图片数 ÷ 图片总数', purpose: '判断图片语义是否可用于文本检索', format: m => `${(m.image_semantic_coverage * 100).toFixed(1)}%` },
@@ -67,21 +59,18 @@ const METRIC_GROUPS: Record<string, MetricMeta[]> = {
   scale: SCALE_METRICS,
   structure: STRUCTURE_METRICS,
   content_type: CONTENT_TYPE_METRICS,
-  table_image: TABLE_IMAGE_METRICS,
 }
 
 const CATEGORY_HINTS: Record<string, string> = {
   scale: '提示：短 / 长元素的长度阈值需按实际文档校准——列表项、标题、参数值可能很短，但有很高的检索价值，不宜一律视为噪声。',
   structure: '提示：标题覆盖度通常比标题数量更有用——即使检测到很多标题，若大量正文无法关联到章节，也不一定适合直接标题分块。',
-  content_type: '提示：比例统一按 Token 口径统计，表格文本已含于总内容中、不重复计入分母；图片面积比只是密度代理，不等于图片语义重要性。',
-  table_image: '提示：table_token_ratio 分母统一为「正文文本 Token + 表格文本 Token」；图片语义覆盖当前用图片区域内文本层近似，完整实现需接入 OCR / 视觉模型。',
+  content_type: '提示：比例统一按 Token 口径统计；table_token_ratio 分母为「正文 + 表格」总 Token；图片面积与语义覆盖均为近似代理，不等于图片语义重要性。',
 }
 
 const FETCHERS: Record<string, (docId: string) => Promise<any>> = {
   scale: documentSizeIndexAnalyse,
   structure: structureIndexAnalyse,
   content_type: contentTypeIndexAnalyse,
-  table_image: tableImageIndexAnalyse,
 }
 
 export default function DocumentAnalysisPanel({ docId, filename, onClose }: Props) {
