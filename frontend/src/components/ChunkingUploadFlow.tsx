@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { analyzeDocument, confirmAnalyzedDocument, previewDocumentChunks, uploadDocument } from '../api/client'
-import type { ChunkAnalysis, ChunkMethod, ChunkPreview, ChunkingStrategy } from '../api/client'
+import type { ChunkAnalysis, ChunkMethod, ChunkPreview, ChunkingStrategy, ParseMethod } from '../api/client'
 
 interface Props {
   kbId: string
@@ -34,6 +34,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
   const [fileIndex, setFileIndex] = useState(0)
   const [phase, setPhase] = useState<Phase>('choice')
   const [preAnalyze, setPreAnalyze] = useState(false)
+  const [parseMethod, setParseMethod] = useState<ParseMethod>('plain')
   const [chunkMethods, setChunkMethods] = useState<ChunkMethod[]>(['general'])
   const [analysis, setAnalysis] = useState<ChunkAnalysis | null>(null)
   const [preview, setPreview] = useState<ChunkPreview | null>(null)
@@ -53,6 +54,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setFileIndex(index => index + 1)
     setPhase('choice')
     setPreAnalyze(false)
+    setParseMethod('plain')
     setChunkMethods(['general'])
     setAnalysis(null)
     setPreview(null)
@@ -60,6 +62,10 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setStrategy(null)
     setError('')
     setPreviewError('')
+  }
+
+  function toggleParseMethod(method: Exclude<ParseMethod, 'none'>) {
+    setParseMethod(current => (current === method ? 'none' : method))
   }
 
   async function continueAfterCurrent() {
@@ -91,7 +97,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setPhase('uploading')
     setError('')
     try {
-      await uploadDocument(kbId, file)
+      await uploadDocument(kbId, file, parseMethod)
       await continueAfterCurrent()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '上传失败')
@@ -107,6 +113,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
   function returnToChoice() {
     setPhase('choice')
     setPreAnalyze(false)
+    setParseMethod('plain')
     setChunkMethods(['general'])
     setAnalysis(null)
     setPreview(null)
@@ -122,7 +129,7 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
     setError('')
     try {
       if (!analysis?.analysis_id) throw new Error('分析结果缺少临时任务编号，请重新分析')
-      await confirmAnalyzedDocument(kbId, analysis.analysis_id, chunkMethods, strategy)
+      await confirmAnalyzedDocument(kbId, analysis.analysis_id, chunkMethods, strategy, parseMethod)
       if (isLast) await finish()
       else advanceToNext()
     } catch (reason) {
@@ -176,6 +183,39 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
             <h3 className="font-semibold">为这份文件设置上传方式</h3>
             <p className="mt-1 text-sm" style={{ color: 'var(--color-text-3)' }}>每份文件分别设置，下一份文件可单独选择。</p>
           </div>
+
+          <section className="rounded-2xl p-4 sm:p-5" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold">解析方式</h4>
+              <p className="mt-1 text-xs" style={{ color: 'var(--color-text-3)' }}>选择如何提取文档内容；不勾选时仅上传文件、不提取文本。</p>
+            </div>
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl p-3.5 transition-colors" style={{ background: parseMethod === 'plain' ? 'var(--color-cyan-dim)' : 'var(--color-surface-2)', border: `1px solid ${parseMethod === 'plain' ? 'var(--color-cyan)' : 'var(--color-border)'}` }}>
+                <input type="checkbox" checked={parseMethod === 'plain'} onChange={() => toggleParseMethod('plain')} className="mt-0.5 h-4 w-4 accent-cyan-400" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">纯文本解析（原方式）</span>
+                  <span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>直接提取文档内嵌文本，适合常规文字型 PDF / Word。解析后可检索、可问答。</span>
+                </span>
+                {parseMethod === 'plain' && <span className="shrink-0 text-xs font-medium" style={{ color: 'var(--color-cyan)' }}>已选</span>}
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl p-3.5 transition-colors" style={{ background: parseMethod === 'deepdoc' ? 'var(--color-cyan-dim)' : 'var(--color-surface-2)', border: `1px solid ${parseMethod === 'deepdoc' ? 'var(--color-cyan)' : 'var(--color-border)'}` }}>
+                <input type="checkbox" checked={parseMethod === 'deepdoc'} onChange={() => toggleParseMethod('deepdoc')} className="mt-0.5 h-4 w-4 accent-cyan-400" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-sm font-medium">DeepDocs 解析 <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ color: 'var(--color-amber)', background: 'color-mix(in srgb, var(--color-amber) 15%, transparent)' }}>即将上线</span></span>
+                  <span className="mt-1 block text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>版面分析 + OCR + 表格结构还原，适合扫描件、复杂排版。当前暂未开放。</span>
+                </span>
+                {parseMethod === 'deepdoc' && <span className="shrink-0 text-xs font-medium" style={{ color: 'var(--color-cyan)' }}>已选</span>}
+              </label>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--color-surface-2)' }}>
+              <span className="text-xs" style={{ color: 'var(--color-text-2)' }}>当前解析方式</span>
+              <span className="text-xs font-medium" style={{ color: parseMethod === 'none' ? 'var(--color-amber)' : 'var(--color-cyan)' }}>
+                {parseMethod === 'plain' ? '纯文本解析' : parseMethod === 'deepdoc' ? 'DeepDocs 解析（即将上线）' : '仅上传，不解析'}
+              </span>
+            </div>
+          </section>
 
           <section className="rounded-2xl p-4 sm:p-5" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
             <div className="flex items-start gap-3">
@@ -244,9 +284,9 @@ export default function ChunkingUploadFlow({ kbId, files, onClose, onComplete }:
       </div>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t p-4" style={{ borderColor: 'var(--color-border)' }}>
-        <p className="text-xs" style={{ color: 'var(--color-text-3)' }}>{files.length > 1 ? `逐份确认上传方式 · 队列中还有 ${files.length - fileIndex} 份文件` : '未勾选预分析时会直接使用原有上传流程。'}</p>
+        <p className="text-xs" style={{ color: 'var(--color-text-3)' }}>{files.length > 1 ? `逐份确认上传方式 · 队列中还有 ${files.length - fileIndex} 份文件` : '将按所选解析方式上传，未勾选预分析时不进行 AI 预分析。'}</p>
         <div className="flex gap-2">
-          {phase === 'choice' && <button type="button" onClick={() => void startCurrentFile()} className="rounded-lg px-4 py-2 text-sm font-medium" style={{ color: 'var(--color-text-inv)', background: 'var(--color-cyan)' }}>{preAnalyze ? '开始 AI 预分析' : '按原流程上传'}</button>}
+          {phase === 'choice' && <button type="button" onClick={() => void startCurrentFile()} className="rounded-lg px-4 py-2 text-sm font-medium" style={{ color: 'var(--color-text-inv)', background: 'var(--color-cyan)' }}>{preAnalyze ? '开始 AI 预分析' : parseMethod === 'none' ? '仅上传文件' : '上传并解析'}</button>}
           {isPreviewStale && <button type="button" disabled={phase !== 'ready'} onClick={() => void refreshPreview()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)', opacity: phase === 'ready' ? 1 : .55 }}>{phase === 'previewing' ? '正在生成预览…' : '按当前参数刷新预览'}</button>}
           {phase === 'error' && !analysis && <button type="button" onClick={() => void startCurrentFile()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)' }}>{preAnalyze ? '重试分析' : '重试上传'}</button>}
           {phase === 'error' && analysis && <button type="button" disabled={isPreviewStale} onClick={() => void confirmUpload()} className="rounded-lg px-4 py-2 text-sm" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-2)', opacity: isPreviewStale ? .5 : 1 }}>重试上传</button>}

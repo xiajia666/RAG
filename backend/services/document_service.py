@@ -34,11 +34,39 @@ def remove_original_file(tenant_id: str, doc_id: str, filename: str) -> None:
                 pass
 
 
-def ingest_document(tenant_id: str, kb_id: str, original_filename: str, data: bytes) -> dict:
-    """Parse, persist, index and compensate storage on indexing failure."""
+def ingest_document(tenant_id: str, kb_id: str, original_filename: str, data: bytes,
+                    parse_method: str = "plain") -> dict:
+    """Parse, persist, index and compensate storage on indexing failure.
+
+    parse_method:
+      - "plain"  纯文本解析后分块索引（原有方式）；
+      - "deepdoc" DeepDocs 深度解析，接口已预留、实现待开发（返回 501）；
+      - "none"   仅保存原始文件，不解析、不建立索引。
+    """
     filename = os.path.basename((original_filename or "unnamed").replace("\\", "/"))
     if not data:
         raise DocumentIngestionError("文件为空")
+
+    parse_method = (parse_method or "plain").strip().lower()
+    if parse_method == "deepdoc":
+        # 接口已预留：DeepDocs 深度解析（版面分析 + OCR + 表格结构）实现待开发。
+        raise DocumentIngestionError("DeepDocs 解析功能即将上线，暂未开放", 501)
+    if parse_method not in ("plain", "none"):
+        raise DocumentIngestionError("不支持的解析方式")
+
+    # 仅上传不解析：只保存原始文件，不提取文本、不建立索引。
+    if parse_method == "none":
+        doc_id = uuid.uuid4().hex
+        document_repository.create_document(tenant_id, kb_id, doc_id, filename, len(data))
+        try:
+            with open(original_path(tenant_id, doc_id, filename), "wb") as uploaded_file:
+                uploaded_file.write(data)
+        except Exception as exc:
+            document_repository.delete_document(tenant_id, doc_id)
+            raise DocumentIngestionError(f"保存文件失败：{exc}", 500) from exc
+        return {"document": document_repository.get_document(tenant_id, doc_id), "chunk_count": 0}
+
+    # 纯文本解析（原有方式）：解析 -> 分块 -> 向量入库。
     try:
         text = (parsing.extract_text(filename, data) or "").strip()
     except Exception as exc:

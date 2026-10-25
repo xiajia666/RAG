@@ -35,6 +35,9 @@ export interface ChunkingStrategy {
 
 export type ChunkMethod = 'general' | 'qa' | 'table' | 'paper' | 'book' | 'manual' | 'laws' | 'presentation' | 'email' | 'one'
 
+// 解析方式：plain=纯文本解析（原方式）；deepdoc=DeepDocs 深度解析（暂未开放）；none=仅上传不解析。
+export type ParseMethod = 'plain' | 'deepdoc' | 'none'
+
 export interface ChunkAnalysis {
   analysis_id: string
   filename: string
@@ -138,20 +141,24 @@ export async function confirmAnalyzedDocument(
   analysisId: string,
   chunkMethods: ChunkMethod[],
   chunkingStrategy: ChunkingStrategy,
+  parseMethod: ParseMethod = 'plain',
 ): Promise<{ document: Document; chunk_count: number }> {
   return api.post<{ document: Document; chunk_count: number }>(`/api/kbs/${kbId}/documents/confirm`, {
     analysis_id: analysisId,
     chunk_methods: chunkMethods,
     chunking_strategy: chunkingStrategy,
+    parse_method: parseMethod,
   })
 }
 
 export async function uploadDocument(
   kbId: string,
   file: File,
+  parseMethod: ParseMethod = 'plain',
 ): Promise<{ document: Document; chunk_count: number }> {
   const form = new FormData()
   form.append('file', file)
+  form.append('parse_method', parseMethod)
   return postForm(`/api/kbs/${kbId}/documents`, form)
 }
 

@@ -137,14 +137,16 @@ def list_documents(kb_id: str, user=CurrentUser()):
     )
 
 
-# 上传文档并执行解析、分块和向量入库。
+# 上传文档并执行解析、分块和向量入库。解析方式由表单字段 parse_method 指定：
+# plain（纯文本，默认）/ deepdoc（DeepDocs，暂未开放）/ none（仅上传不解析）。
 @api.post('/api/kbs/{kb_id}/documents')
-def upload_document(kb_id: str, file,
+def upload_document(kb_id: str, file, request,
                           user=CurrentUser()):
     get_kb_for_user(kb_id, user, write=True)
+    parse_method = (request.form.get('parse_method') or 'plain').strip().lower()
     try:
         return document_service.ingest_document(
-            user["tenant_id"], kb_id, file.filename, file.read()
+            user["tenant_id"], kb_id, file.filename, file.read(), parse_method
         )
     except document_service.DocumentIngestionError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
