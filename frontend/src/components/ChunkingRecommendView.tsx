@@ -12,6 +12,21 @@ const STATUS_META: Record<string, { color: string; label: string }> = {
   parse_repair_required: { color: 'var(--color-red)', label: '需解析修复' },
 }
 
+const STRATEGY_LABELS: Record<string, string> = {
+  qa: '问答对', structure_aware: '结构优先', recursive: '递归', code_aware: '代码感知',
+  table_aware: '表格感知', caption_linked: '图文关联', fixed: '固定长度', semantic: '语义优先',
+  contract_aware: '条款感知', paper_aware: '论文结构', one: '整篇',
+}
+
+const REASON_KEY_LABELS: Record<string, string> = {
+  chunk_size: '分块大小', overlap_percent: '重叠', separators: '分隔符', top_k: 'TopK',
+  strategy: '策略', table_window_tokens: '表格上下文', image_window_tokens: '图片上下文',
+}
+
+function label(map: Record<string, string>, value: string): string {
+  return map[value] ?? value
+}
+
 function formatSeparator(s: string): string {
   return s.replace(/\n/g, '⏎').replace(/\t/g, '⇥').replace(/ /g, '␣')
 }
@@ -106,8 +121,8 @@ function RecommendDisplay({ recommend }: { recommend: ChunkingRecommendation }) 
 
       <section className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
         <h4 className="mb-2 text-sm font-semibold">分块策略</h4>
-        {strategy.primary && <Row label="主策略" value={strategy.primary} />}
-        {elements.map(([key, value]) => <Row key={key} label={`${key} 处理`} value={value} />)}
+        {strategy.primary && <Row label="主策略" value={label(STRATEGY_LABELS, strategy.primary)} />}
+        {elements.map(([key, value]) => <Row key={key} label={`${label(STRATEGY_LABELS, key)} 处理`} value={label(STRATEGY_LABELS, value)} />)}
       </section>
 
       <section className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
@@ -146,7 +161,7 @@ function RecommendDisplay({ recommend }: { recommend: ChunkingRecommendation }) 
           <h4 className="mb-2 text-sm font-semibold">参数理由</h4>
           {Object.entries(reasons).map(([key, value]) => (
             <div key={key} className="mb-2">
-              <span className="text-xs font-medium" style={{ color: 'var(--color-cyan)' }}>{key}</span>
+              <span className="text-xs font-medium" style={{ color: 'var(--color-cyan)' }}>{label(REASON_KEY_LABELS, key)}</span>
               {(Array.isArray(value) ? value : [value]).map((reason, i) => (
                 <p key={i} className="mt-0.5 text-xs leading-5" style={{ color: 'var(--color-text-2)' }}>{reason}</p>
               ))}

@@ -132,7 +132,8 @@ def recommend_chunking(doc: dict, data: bytes, text: str) -> dict:
     payload = build_metrics_payload(doc, data, text)
     user_content = (
         "请基于以下文档指标，给出分块策略推荐。\n"
-        "只返回符合 Output contract 的 JSON，不要输出任何解释性文字或 markdown 代码块。\n\n"
+        "只返回符合 Output contract 的 JSON，不要输出任何解释性文字或 markdown 代码块。\n"
+        "所有描述性文字（warnings、parameter_reasons 的说明等）用中文输出；JSON 键名与枚举值（status、strategy 名等）保持英文契约不变。\n\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
     )
     messages = [
