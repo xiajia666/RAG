@@ -11,13 +11,15 @@
 - **产品工作台**：仪表盘、知识库向导、智能问答、文档管理、数据分析、团队管理和设置均接入后端数据。
 - **多用户登录**：bcrypt + JWT，首个注册用户自动成为管理员；团队邀请生成初始密码，当前版本尚未接入邮件投递。
 - **流式问答**：SSE 流式输出，回答附带来源文档与相关度分数。
+- **解析方式可选**：上传时可选纯文本解析（原方式）、DeepDoc 深度解析（版面 + OCR + 表格，即将上线）、或仅上传不解析。
+- **文档预分析**：对每份文档提供四类指标分析（文档规模 / 结构化程度 / 内容类型分布 / AI 分块策略推荐），结果缓存到数据库，二次进入秒开。
 - **数据隔离**：业务记录始终按 `tenant_id` 查询；MySQL 可用于远程部署，上传文件保存在应用服务器的租户独立目录。
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Python 3.11 · Flask · SQLAlchemy（MySQL / SQLite）· numpy · DeepSeek（问答）· 云端 Embedding（检索） |
+| 后端 | Python 3.11 · Flask · SQLAlchemy（MySQL / SQLite）· PyMuPDF（解析与指标）· numpy · DeepSeek（问答 + AI 分块推荐）· 云端 Embedding（检索） |
 | 前端 | React 18 · TypeScript · Vite · Tailwind CSS 4 · react-router · react-markdown |
 
 ## 目录结构
@@ -34,7 +36,10 @@ RAG/
 │   ├── services/     # 文档入库、聊天等业务编排
 │   ├── repositories/ # 数据持久化访问
 │   ├── models/       # SQLAlchemy 数据模型
-│   ├── rag/          # parsing、embeddings、vector_store、generation、llm
+│   ├── rag/          # parsing、analysis、recommend、embeddings、vector_store、generation、llm
+│   │   ├── parse_method/  # DeepDoc 深度解析（DLA / OCR / TSR，Python 移植）
+│   │   ├── parse_model/   # DeepDoc 模型权重（det / rec / layout / tsr / ocr.res）
+│   │   └── parse_skill/   # AI 分块推荐评估 skill
 │   ├── security/     # 认证与授权
 │   ├── ops/          # MySQL 初始化等运维命令
 │   ├── main.py       # Flask 本地开发入口
@@ -76,6 +81,10 @@ ELASTICSEARCH_API_KEY=
 ELASTICSEARCH_USERNAME=
 ELASTICSEARCH_PASSWORD=
 ELASTICSEARCH_VERIFY_CERTS=true
+
+# DeepDoc 深度解析（版面分析 + OCR + 表格结构；需 onnxruntime/opencv/pyclipper/PyMuPDF + 模型权重）
+DEEP_DOC_MODEL_DIR=backend/rag/parse_model
+DEEP_DOC_ENABLED=false
 
 # JWT 密钥（留空则自动生成并持久化到 backend/data/.jwt_secret）
 JWT_SECRET=
@@ -159,9 +168,23 @@ npm run build          # 构建到 frontend/dist，由后端静态托管
 
 1. 打开应用 → 注册首个账号（自动成为**管理员**）。
 2. 管理员新建知识库（如「员工手册」）。
-3. 在「文档管理」中上传 PDF / Word / txt / md 等文档（自动解析、分块、向量化）。
-4. 在知识库内直接提问，回答会附带来源文档与相关度。
-5. 管理员在「用户管理」中为员工创建账号（角色：成员）。
+3. 在「文档管理」中上传 PDF / Word / txt / md 等文档（可选解析方式，自动解析、分块、向量化）。
+4. 对文档点击「预分析」查看四类指标，并可生成 AI 分块策略推荐。
+5. 在知识库内直接提问，回答会附带来源文档与相关度。
+6. 管理员在「用户管理」中为员工创建账号（角色：成员）。
+
+## 文档预分析
+
+文档管理页对每份文档提供「预分析」面板，分四类：
+
+| 分类 | 说明 |
+|---|---|
+| 文档规模指标 | 物理页数、有效字符数、预估 Token、每页平均/最大/最小 Token、空白页、短/长元素占比 |
+| 结构化程度指标 | 标题密度、标题层级数、标题覆盖度、正文段落数、列表占比、问答占比 |
+| 内容类型分布 | 表格/代码/问答/公式 Token 占比、表格结构恢复率、每页图片数、图片覆盖与语义覆盖 |
+| AI 分块策略推荐 | 基于 `rag/parse_skill/ai_recommend_skill.md` 评估 skill，由 DeepSeek 生成 chunk size / overlap / separators / 分块策略 / TopK / 表格图片上下文窗口等推荐 |
+
+四类分析结果缓存到 `document_analyses` 表（按租户 + 文档 + 分类唯一定位）：首次计算后写入数据库，再次进入直接读缓存；重新解析文档会清除该文档的缓存。
 
 ## 权限模型
 
