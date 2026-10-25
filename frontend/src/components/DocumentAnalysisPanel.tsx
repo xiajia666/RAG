@@ -36,6 +36,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState(CATEGORIES[0].id)
+  const [hovered, setHovered] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -68,16 +69,25 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
           {!loading && error && <p className="py-10 text-center text-sm" style={{ color: 'var(--color-red)' }}>{error}</p>}
           {!loading && !error && metrics && active === 'scale' && (
             <>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {SCALE_METRICS.map(metric => (
-                  <article key={metric.key} className="rounded-xl p-4" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-sm font-medium">{metric.name}</span>
-                      <span className="shrink-0 text-lg font-semibold" style={{ color: 'var(--color-cyan)' }}>{metric.format(metrics)}</span>
-                    </div>
-                    <p className="mt-2 text-xs leading-5" style={{ color: 'var(--color-text-3)' }}>计算方法：{metric.method}</p>
-                    <p className="mt-1 text-xs leading-5" style={{ color: 'var(--color-text-2)' }}>作用：{metric.purpose}</p>
-                  </article>
+                  <div key={metric.key} className="flex items-center justify-between gap-3 rounded-lg px-3.5 py-2.5" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+                    <span className="flex min-w-0 items-center gap-1.5 text-sm" style={{ color: 'var(--color-text-2)' }}>
+                      <span className="truncate">{metric.name}</span>
+                      <span className="relative shrink-0" onMouseEnter={() => setHovered(metric.key)} onMouseLeave={() => setHovered(null)}>
+                        <span className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[10px] font-semibold" style={{ color: 'var(--color-text-3)', background: 'var(--color-surface-3)', border: '1px solid var(--color-border)' }}>?</span>
+                        {hovered === metric.key && (
+                          <span className="absolute bottom-full left-1/2 z-10 mb-1.5 w-56 -translate-x-1/2 rounded-lg p-2.5 text-left text-xs leading-5" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-border-md)', color: 'var(--color-text-2)', boxShadow: '0 10px 28px rgba(0,0,0,.5)', pointerEvents: 'none' }}>
+                            <span className="mb-0.5 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>计算方法</span>
+                            <span className="block">{metric.method}</span>
+                            <span className="mt-2 mb-0.5 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>作用</span>
+                            <span className="block">{metric.purpose}</span>
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-base font-semibold" style={{ color: 'var(--color-cyan)' }}>{metric.format(metrics)}</span>
+                  </div>
                 ))}
               </div>
               <p className="mt-4 text-[11px] leading-5" style={{ color: 'var(--color-text-3)' }}>提示：短 / 长元素的长度阈值需按实际文档校准——列表项、标题、参数值可能很短，但有很高的检索价值，不宜一律视为噪声。</p>
