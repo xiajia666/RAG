@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { documentSizeIndexAnalyse } from '../api/client'
 import type { DocumentMetrics } from '../api/types'
 
@@ -37,6 +37,18 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState(CATEGORIES[0].id)
   const [hovered, setHovered] = useState<string | null>(null)
+  const [tooltipDown, setTooltipDown] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  function showTooltip(key: string, e: MouseEvent<HTMLElement>) {
+    setHovered(key)
+    const icon = e.currentTarget
+    const container = scrollRef.current
+    if (!container || !icon) return
+    // 上方空间不足（约一个 tooltip 高度 + 边距）时朝下弹出，避免被顶部裁切
+    const spaceAbove = icon.getBoundingClientRect().top - container.getBoundingClientRect().top
+    setTooltipDown(spaceAbove < 120)
+  }
 
   useEffect(() => {
     let alive = true
@@ -49,7 +61,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(7,11,18,.82)', backdropFilter: 'blur(6px)' }}>
-      <section className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-md)' }}>
+      <section className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-md)' }}>
         <header className="flex items-start justify-between gap-3 border-b p-4" style={{ borderColor: 'var(--color-border)' }}>
           <div className="min-w-0">
             <h3 className="text-base font-semibold">文档预分析</h3>
@@ -64,20 +76,20 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
           ))}
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-5">
           {loading && <div className="flex min-h-48 flex-col items-center justify-center text-center"><span className="mb-3 h-8 w-8 animate-spin rounded-full border-2 border-current border-r-transparent" style={{ color: 'var(--color-cyan)' }} /><p className="text-sm" style={{ color: 'var(--color-text-3)' }}>正在计算指标…</p></div>}
           {!loading && error && <p className="py-10 text-center text-sm" style={{ color: 'var(--color-red)' }}>{error}</p>}
           {!loading && !error && metrics && active === 'scale' && (
             <>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {SCALE_METRICS.map(metric => (
-                  <div key={metric.key} className="flex items-center justify-between gap-3 rounded-lg px-3.5 py-2.5" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+              <div className="overflow-hidden rounded-xl" style={{ border: '1px solid var(--color-border)' }}>
+                {SCALE_METRICS.map((metric, index) => (
+                  <div key={metric.key} className={`flex items-center justify-between gap-3 px-4 py-3 ${hovered === metric.key ? 'relative z-10' : ''}`} style={{ borderTop: index > 0 ? '1px solid var(--color-border)' : 'none' }}>
                     <span className="flex min-w-0 items-center gap-1.5 text-sm" style={{ color: 'var(--color-text-2)' }}>
                       <span className="truncate">{metric.name}</span>
-                      <span className="relative shrink-0" onMouseEnter={() => setHovered(metric.key)} onMouseLeave={() => setHovered(null)}>
+                      <span className="relative shrink-0" onMouseEnter={e => showTooltip(metric.key, e)} onMouseLeave={() => setHovered(null)}>
                         <span className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[10px] font-semibold" style={{ color: 'var(--color-text-3)', background: 'var(--color-surface-3)', border: '1px solid var(--color-border)' }}>?</span>
                         {hovered === metric.key && (
-                          <span className="absolute bottom-full left-1/2 z-10 mb-1.5 w-56 -translate-x-1/2 rounded-lg p-2.5 text-left text-xs leading-5" style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-border-md)', color: 'var(--color-text-2)', boxShadow: '0 10px 28px rgba(0,0,0,.5)', pointerEvents: 'none' }}>
+                          <span className={`absolute left-0 z-10 w-56 rounded-lg p-2.5 text-left text-xs leading-5 ${tooltipDown ? 'top-full mt-1.5' : 'bottom-full mb-1.5'}`} style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-border-md)', color: 'var(--color-text-2)', boxShadow: '0 10px 28px rgba(0,0,0,.5)', pointerEvents: 'none' }}>
                             <span className="mb-0.5 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>计算方法</span>
                             <span className="block">{metric.method}</span>
                             <span className="mt-2 mb-0.5 block text-[11px]" style={{ color: 'var(--color-text-3)' }}>作用</span>
@@ -86,7 +98,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
                         )}
                       </span>
                     </span>
-                    <span className="shrink-0 text-base font-semibold" style={{ color: 'var(--color-cyan)' }}>{metric.format(metrics)}</span>
+                    <span className="shrink-0 text-base font-semibold tabular-nums" style={{ color: 'var(--color-cyan)' }}>{metric.format(metrics)}</span>
                   </div>
                 ))}
               </div>
