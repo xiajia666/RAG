@@ -111,7 +111,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(7,11,18,.82)', backdropFilter: 'blur(6px)' }}>
-      <section className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-md)' }}>
+      <section className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-md)' }}>
         <header className="flex items-start justify-between gap-3 border-b p-4" style={{ borderColor: 'var(--color-border)' }}>
           <div className="min-w-0">
             <h3 className="text-base font-semibold">文档预分析</h3>
@@ -120,7 +120,7 @@ export default function DocumentAnalysisPanel({ docId, filename, onClose }: Prop
           <button onClick={onClose} className="shrink-0 text-sm" style={{ color: 'var(--color-text-3)' }}>关闭</button>
         </header>
 
-        <nav className="flex flex-wrap gap-1 border-b px-4 py-2" style={{ borderColor: 'var(--color-border)' }}>
+        <nav className="flex gap-1 border-b px-4 py-2" style={{ borderColor: 'var(--color-border)' }}>
           {CATEGORIES.map(cat => (
             <button key={cat.id} onClick={() => { if (cat.id === active) return; setActive(cat.id); setHovered(null); setMetrics(null); setLoading(true) }} className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium" style={active === cat.id ? { color: 'var(--color-text-inv)', background: 'var(--color-cyan)' } : { color: 'var(--color-text-2)' }}>{cat.name}</button>
           ))}
