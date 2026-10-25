@@ -1,606 +1,568 @@
-# Chunking Strategy Advisor Skill
-
-## 1. Skill 基本信息
-
-- **Skill Name**：`chunking-strategy-advisor`
-- **Version**：`1.0.0`
-- **Description**：根据文档预解析指标、结构特征和内容类型，为 RAG 知识库推荐可执行、可解释、可验证的分块策略。
-- **适用场景**：用户上传文档后、正式切块和构建 Embedding 索引之前。
-- **核心原则**：指标驱动、规则优先、AI 分析、结构保护、真实分块验证。
-- **输出语言**：默认中文。
-- **输出目标**：生成分块参数 JSON、参数级推荐理由、风险提示和预览验证建议。
-
+---
+description: Analyze document pre-parsing metrics for 知微知识库 and
+  recommend RAG chunking strategy parameters, including chunk size,
+  overlap, separators, element-aware handling, retrieval TopK, quality
+  gates, and explanations. Use when designing or reviewing a document
+  chunking recommendation workflow.
+name: zh微-rag-chunking-metrics
 ---
 
-## 2. 角色定义
+# 知微知识库：文档指标分析与分块推荐 Skill
 
-你是一名资深 RAG 文档解析与检索优化工程师，负责为知识库上传的文档制定最合适的分块策略。
+## 1. Purpose
 
-你需要根据输入的文档画像和预解析指标，全面分析：
+Use this skill to turn pre-parsed document metrics into an explainable,
+validated RAG chunking recommendation.
 
-1. 应采用哪一种分块方法。
-2. Chunk Size 应设置为多少 Tokens。
-3. Overlap 应设置为多少 Tokens 和百分比。
-4. 是否应该按标题、段落、问答对、条款、表格、代码等结构进行切分。
-5. 表格上下文窗口应该设置为多少 Tokens。
-6. 图片上下文窗口应该设置为多少 Tokens。
-7. 应采用哪些分隔符，以及分隔符的优先级。
-8. 是否启用子块检索，以及父块与子块的大小关系。
-9. 是否移除页眉页脚、重复目录和其他模板噪声。
-10. 哪些特殊元素必须保持完整。
-11. 当前推荐有哪些风险，哪些参数需要通过真实分块预览进一步确认。
+The skill must: 1. Interpret document structure and content metrics. 2.
+Select a primary chunking strategy and element-specific strategies. 3.
+Recommend chunk size, overlap, separators, table/image context windows,
+and retrieval TopK. 4. Explain which metrics triggered each
+recommendation. 5. Identify missing metrics, uncertainty, conflicts, and
+validation requirements. 6. Return machine-readable JSON that can be
+consumed by the backend rule engine.
 
-你不能只根据文档类型给出固定模板，也不能凭经验随意输出参数。
+Do not claim that heuristic thresholds are universal or optimal. Treat
+them as configurable starting points until calibrated against real
+retrieval evaluation.
 
-每个核心参数都必须结合实际指标、推荐标准、结构约束和检索目标进行分析。
+## 2. Operating principles
 
-## 3. 输入数据
+-   **Rules constrain; the AI explains and ranks.** Do not let the model
+    invent arbitrary parameter values outside configured bounds.
+-   **Preserve semantic atoms.** Do not split a QA pair, code function,
+    table header/body relationship, list item group, or image-caption
+    relationship merely to hit a target chunk size.
+-   **Separate primary strategy from element strategies.** A document
+    may use `qa` as its primary strategy while using `code_aware` for
+    code and `table_aware` for tables.
+-   **Do not confuse preprocessing with chunking.** OCR repair,
+    reading-order correction, and header/footer detection happen before
+    final chunking.
+-   **TopK is a retrieval parameter.** Document metrics can suggest a
+    starting range, but evaluation data and context budget determine
+    final values.
+-   **Keep provenance.** Preserve document ID, page number, heading
+    path, source span/coordinates, and element type wherever available.
+-   **Make uncertainty explicit.** Missing or low-confidence metrics
+    must produce warnings, not fabricated values.
+-   **Do not silently discard content.** Header/footer removal must be
+    evidence-based and auditable.
 
-输入为 Document Profile、Page Profile、Element Profile 中已经计算好的指标。
+## 3. Input contract
 
-输入示例：
+Accept a JSON object containing `document`, `metrics`, optional
+`retrieval_context`, and optional `constraints`.
 
-```json
+### 3.1 Document metadata
+
+Recommended fields:
+
+-   `document_id`: string
+-   `file_type`:
+    `pdf | docx | markdown | html | txt | csv | xlsx | code | other`
+-   `language`: language tag, such as `zh-CN` or `en`
+-   `page_count`: integer or null
+-   `total_tokens`: integer or null
+-   `document_type_hint`: optional user/system hint
+-   `parser_name`, `parser_version`: optional
+
+### 3.2 Core structure metrics
+
+  ------------------------------------------------------------------------------
+  Metric                         Type / unit             Meaning
+  ------------------------------ ----------------------- -----------------------
+  `heading_structure`            enum: `clear`,          Whether heading
+                                 `partial`, `none`,      hierarchy can be
+                                 `unknown`               reliably detected
+
+  `heading_hierarchy_coverage`   0--1                    Proportion of content
+                                                         with a usable heading
+                                                         path
+
+  `heading_density`              headings per 1,000      Heading frequency;
+                                 tokens or normalized    units must be
+                                 0--1                    explicitly identified
+
+  `paragraph_count`              integer                 Number of detected
+                                                         paragraphs
+
+  `avg_paragraph_tokens`         tokens                  Mean paragraph length
+
+  `p50_paragraph_tokens`         tokens                  Median paragraph length
+
+  `p90_paragraph_tokens`         tokens                  90th percentile
+                                                         paragraph length
+
+  `paragraph_length_cv`          non-negative number     Standard deviation /
+                                                         mean of paragraph
+                                                         lengths
+
+  `long_paragraph_ratio`         0--1                    Fraction of paragraphs
+                                                         exceeding a configured
+                                                         length threshold
+
+  `list_ratio`                   0--1                    Fraction of content
+                                                         represented by lists
+
+  `topic_count_estimate`         integer or null         Estimated number of
+                                                         distinct topics
+
+  `topic_switch_rate`            0--1 or documented unit Estimated frequency of
+                                                         topic changes
+  ------------------------------------------------------------------------------
+
+### 3.3 Table metrics
+
+  -------------------------------------------------------------------------------
+  Metric                          Type / unit             Meaning
+  ------------------------------- ----------------------- -----------------------
+  `table_count`                   integer                 Detected tables
+
+  `table_token_ratio`             0--1                    Fraction of total
+                                                          tokens inside tables
+
+  `large_table_ratio`             0--1                    Fraction of tables
+                                                          exceeding configured
+                                                          row/token threshold
+
+  `table_header_detection_rate`   0--1                    Fraction of tables with
+                                                          identified headers
+
+  `table_structure_confidence`    0--1                    Confidence in
+                                                          row/column
+                                                          reconstruction
+
+  `table_text_dependency`         enum: `low`, `medium`,  How much table
+                                  `high`, `unknown`       interpretation depends
+                                                          on nearby prose
+  -------------------------------------------------------------------------------
+
+### 3.4 Image and multimodal metrics
+
+  --------------------------------------------------------------------------------
+  Metric                           Type / unit             Meaning
+  -------------------------------- ----------------------- -----------------------
+  `image_count`                    integer                 Detected images/figures
+
+  `image_density`                  0--1 or explicitly      Image density;
+                                   documented rate         denominator must be
+                                                           specified
+
+  `figure_caption_coverage`        0--1                    Fraction of figures
+                                                           with detected captions
+
+  `image_text_dependency`          enum: `low`, `medium`,  Need for nearby prose
+                                   `high`, `unknown`       to interpret figures
+
+  `ocr_page_ratio`                 0--1                    Fraction of pages
+                                                           requiring OCR
+
+  `ocr_confidence`                 0--1 or null            OCR confidence, with
+                                                           aggregation method
+                                                           documented
+
+  `layout_confidence`              0--1 or null            Confidence in layout
+                                                           detection
+
+  `reading_order_violation_rate`   0--1 or null            Rate of suspected
+                                                           reading-order errors
+  --------------------------------------------------------------------------------
+
+### 3.5 Special-content metrics
+
+  ---------------------------------------------------------------------------------
+  Metric                            Type / unit             Meaning
+  --------------------------------- ----------------------- -----------------------
+  `is_qa_document`                  boolean or null         Whether the document is
+                                                            primarily
+                                                            question-answer content
+
+  `qa_pair_count`                   integer or null         Number of detected QA
+                                                            pairs
+
+  `qa_pair_integrity`               0--1 or null            Confidence that
+                                                            questions and answers
+                                                            are correctly paired
+
+  `qa_detection_confidence`         0--1 or null            QA classifier
+                                                            confidence
+
+  `code_ratio`                      0--1                    Fraction of content
+                                                            classified as code
+
+  `is_code_dense`                   boolean or null         Whether code density
+                                                            exceeds configured
+                                                            threshold
+
+  `code_detection_confidence`       0--1 or null            Confidence in code
+                                                            detection
+
+  `function_class_detection_rate`   0--1 or null            Fraction of code with
+                                                            recognized syntax
+                                                            boundaries
+
+  `formula_ratio`                   0--1 or null            Fraction of
+                                                            mathematical/formula
+                                                            content
+
+  `citation_density`                0--1 or documented unit Density of
+                                                            references/citations
+
+  `boilerplate_ratio`               0--1                    Estimated fraction of
+                                                            template/repeated
+                                                            content
+  ---------------------------------------------------------------------------------
+
+### 3.6 Quality and retrieval context
+
+-   `parse_quality_score`: 0--1, with documented formula
+-   `header_footer_repeat_rate`: 0--1
+-   `header_footer_candidate_count`: integer or null
+-   `source_mapping_coverage`: 0--1 or null
+-   `target_query_type`:
+    `fact_lookup | semantic_qa | multi_hop | table_lookup | code_lookup | summarization | unknown`
+-   `embedding_model_max_tokens`: integer or null
+-   `generation_context_tokens`: integer or null
+-   `reserved_prompt_tokens`: integer or null
+-   `reranker_enabled`: boolean or null
+-   `retrieval_eval`: optional object containing Recall@K, MRR, nDCG,
+    citation accuracy, latency, and cost by candidate K.
+
+**Metric hygiene:** all ratios must be in `[0,1]`; percentages must be
+normalized to ratios before rules run. Every rate must define its
+denominator. A missing value is `null`/unknown, not zero.
+
+## 4. Initial configurable thresholds
+
+These are starting heuristics, not universal truths. Store them in
+versioned backend configuration so they can be calibrated.
+
+``` json
 {
-  "document_id": "doc_123",
-  "document_type": "mixed",
-  "page_count": 86,
-  "total_tokens": 42300,
-  "avg_paragraph_tokens": 145,
-  "p50_paragraph_tokens": 120,
-  "p90_paragraph_tokens": 260,
-  "p95_paragraph_tokens": 410,
-  "max_paragraph_tokens": 1600,
-  "heading_density": 8.5,
-  "heading_hierarchy_coverage": 0.91,
-  "long_paragraph_ratio": 0.08,
-  "table_count": 18,
-  "table_token_ratio": 0.20,
-  "large_table_ratio": 0.25,
-  "image_count": 24,
-  "image_density": 0.10,
-  "figure_caption_coverage": 0.75,
-  "ocr_page_ratio": 0.10,
-  "ocr_confidence": 0.91,
-  "layout_confidence": 0.92,
-  "reading_order_violation_rate": 0.03,
-  "header_footer_repeat_rate": 0.83,
-  "boilerplate_ratio": 0.04,
-  "code_ratio": 0.25,
-  "list_ratio": 0.12,
-  "is_qa_document": true,
-  "is_code_dense": true,
-  "parse_quality_score": 0.92
+  "thresholds": {
+    "qa_confidence_min": 0.80,
+    "code_confidence_min": 0.80,
+    "heading_coverage_high": 0.80,
+    "table_token_ratio_high": 0.15,
+    "table_token_ratio_medium": 0.05,
+    "image_density_high": 0.10,
+    "image_density_medium": 0.03,
+    "ocr_page_ratio_review": 0.10,
+    "parse_quality_block": 0.50,
+    "overlap_warning_percent": 20,
+    "header_footer_repeat_min": 0.80
+  }
 }
 ```
 
-上述输入只是一份示例。实际执行时必须使用用户提供的真实指标。
+The definition of `image_density` must be fixed across parsers. For
+example, it may mean figures per page normalized to a bounded range, or
+image tokens/regions per page; do not compare incompatible definitions.
+
+## 5. Decision procedure
+
+Execute in this order.
+
+### P0 --- Validate input and parse quality
+
+1.  Validate types, ranges, units, and required fields.
+2.  If `parse_quality_score` is below `parse_quality_block`, or
+    OCR/layout/reading-order metrics indicate serious corruption, set
+    `status = "needs_review"` or `status = "parse_repair_required"`.
+3.  Do not compensate for bad parsing by merely changing chunk size.
+4.  Keep any recommendation provisional until source mapping and reading
+    order are checked.
+
+### P1 --- Identify semantic atoms and element-specific handlers
+
+Detect and preserve, where present:
+
+-   QA pair: keep question and answer linked.
+-   Code: preserve function/class/method or syntax-node boundaries.
+-   Table: preserve table identity, header, units, and row/column
+    relations.
+-   Figure: link caption, alt text/OCR description, and relevant nearby
+    prose.
+-   Contract/policy clauses: preserve article/section numbering and
+    parent path.
+-   Headings and lists: preserve hierarchy and list-item relationships.
+
+Element-level handling takes precedence over generic text splitting
+within that element.
+
+### P2 --- Select primary strategy
+
+Use confidence-aware priority, not raw booleans alone:
+
+1.  If `is_qa_document = true` and
+    `qa_detection_confidence >= qa_confidence_min`, primary strategy =
+    `qa`.
+2.  Otherwise, if `is_code_dense = true` and
+    `code_detection_confidence >= code_confidence_min`, primary strategy
+    = `code_aware`.
+3.  Otherwise, if heading structure is `clear` and
+    `heading_hierarchy_coverage >= heading_coverage_high`, primary
+    strategy = `structure_aware`.
+4.  Otherwise, use `recursive`.
+5.  If document classification is mixed or uncertain, choose the safest
+    general primary strategy and attach element-specific handlers for
+    QA/code/table/image. Explain the conflict in `warnings`.
+
+Do not let a secondary feature, such as a 20% table ratio, automatically
+replace a well-supported QA primary strategy. Instead, activate
+`table_aware` for table elements.
+
+### P3 --- Recommend chunk size
+
+Use a baseline based on paragraph distribution, then apply type-specific
+bounds and semantic-atom constraints.
+
+Baseline heuristic:
+
+`base_chunk_size = clamp(2 * p50_paragraph_tokens, 256, 640)`
+
+If `p50_paragraph_tokens` is missing, use a conservative default
+(e.g. 512) and mark the recommendation as lower confidence.
+
+Adjustments: - FAQ/QA: usually 128--350 tokens; never split a short QA
+pair just to meet target size. - General prose: usually 350--550. -
+Clear technical structure: usually 400--700. - Paper/report: usually
+500--800. - Contract/policy: usually 350--600, respecting clause
+boundaries. - Table-heavy: usually 250--500 for text chunks, but use a
+dedicated table handler. - Code-heavy: usually 300--700, preserving
+syntax boundaries. - OCR-heavy: start around 300--500 only after parse
+quality is acceptable.
+
+Use `p90_paragraph_tokens` to estimate oversize risk: - If P90 is at or
+below target size, no increase is needed solely for paragraph length. -
+If P90 exceeds target, determine whether paragraphs are semantically
+atomic. Increase target size only when preserving a coherent paragraph
+is beneficial and system limits allow it. - If long paragraphs mix
+topics, split semantically rather than simply increasing size. - Chunk
+size is a target, not a command to break atomic structures.
+
+Enforce configured embedding/model bounds. If an atomic element exceeds
+the limit, apply a type-specific splitter and emit a warning.
+
+### P4 --- Recommend overlap
+
+Starting ranges: - QA pairs: 0%. - Clear heading/section boundaries:
+0--5%. - General continuous prose: 5--12%. - Long continuous prose with
+cross-boundary references: 10--15%. - Code: 0--5%, with syntax-aware
+boundaries. - Tables: prefer repeated headers and row-group context
+rather than generic token overlap.
+
+Choose the lowest overlap that protects boundary meaning. Do not
+automatically add overlap to structures already kept intact. Warn when
+overlap exceeds the configured normal range (initially 20%).
+
+`overlap_tokens = floor(chunk_size * overlap_percent / 100)` is only an
+approximate implementation; the actual splitter must document whether
+overlap is measured in tokens, characters, or separator units.
 
-### 3.1 缺失指标处理
+### P5 --- Recommend separators
+
+Separators must be strategy-specific and ordered from strongest semantic
+boundary to weakest fallback.
+
+-   `qa`: QA pair boundary → question/answer boundary → paragraph →
+    sentence.
+-   `structure_aware`: heading/section → paragraph → sentence.
+-   `recursive`: `\n\n` → `\n` → language-specific sentence punctuation
+    → whitespace/token fallback.
+-   `table_aware`: table boundary → header → row group; never flatten a
+    table blindly into punctuation-separated prose.
+-   `code_aware`: module → class → function/method → syntax node →
+    logical line.
+-   `contract_aware`: chapter → article → clause → item → paragraph.
+-   `paper_aware`: section → subsection → paragraph → sentence.
 
-- 不得自行编造输入中没有的指标。
-- 缺失指标应标记为 `unknown`、`null` 或 `missing`。
-- 如果关键指标缺失，应降低对应推荐的置信度。
-- 如果缺失的信息会改变主分块策略，应明确说明不确定性，并优先采用保守方案。
-- 不要将未知指标默认视为 0。
-- 不要把不同定义的指标直接比较。例如，图片数量/页数与图片占页面面积的比例不是同一指标。
-- 如果输入包含指标定义或单位，必须优先遵循输入中的定义。
+For Chinese prose, a practical recursive fallback may include `\n\n`,
+`\n`, `。`, `！`, `？`, `；`, `，`, and whitespace. For English, include
+paragraph boundaries and `.`, `!`, `?`, `;`. Do not use punctuation
+splitting before structure-aware parsing.
 
----
+### P6 --- Recommend table/image context windows
 
-## 4. 决策总流程
+Initial heuristic: - Table token ratio \>= 0.15: table context window
+128 tokens. - Table token ratio \>= 0.05 and \< 0.15: 64 tokens. -
+Otherwise: 0 or only essential metadata. - High image density
+(configured threshold, initially \>= 0.10) with meaningful
+caption/nearby-text dependency: image context 96 tokens. - Medium image
+density (initially \>= 0.03): 48 tokens. - Otherwise: 0 or caption-only
+metadata.
 
-严格按照以下流程执行。
+These values are starting points. Preserve table headers, units,
+caption, source page, and figure/table IDs as structured metadata.
+Context windows should not accidentally duplicate the entire table or
+image description.
 
-### Step 1：检查输入完整性
+### P7 --- Header/footer removal
 
-首先检查：
+Do not remove headers/footers solely because
+`has_template_noise = true`.
 
-- 文档类型和总 Token 数是否有效。
-- 段落长度指标是否使用一致的 Tokenizer。
-- 表格占比、代码占比、图片密度是否具有明确的定义。
-- 标题层级和解析质量是否可信。
-- 是否存在 OCR、阅读顺序或表格识别方面的风险。
-- 是否存在问答、代码、表格等特殊内容。
+Require evidence such as: - high repetition across pages (initial
+starting threshold 0.80), - consistent page-edge location, - low
+semantic variation, - and exclusion of meaningful identifiers.
 
-若发现明显冲突，应先标记问题，不得直接生成看似精确的推荐结果。
+Preserve document title, version, confidentiality marking, contract
+number, policy ID, page-specific warnings, and other
+business-significant text. Store raw parse output or an audit record so
+removals can be reversed.
 
-### Step 2：确定主分块策略
+### P8 --- Recommend TopK
 
-根据以下顺序进行决策。
+TopK cannot be uniquely inferred from document metrics alone.
 
-1. 解析质量不足：进入重新解析或人工复核流程。
-2. 问答对结构明确：优先采用问答对分块。
-3. 合同、法规或条款编号明确：优先按条款分块。
-4. 代码结构明确且代码占比较高：优先采用代码感知分块。
-5. 表格占比高且表格语义占主导：采用表格专用分块。
-6. 标题层级可靠：采用结构感知分块。
-7. 以上条件均不满足：采用通用分块。
+Recommend separate parameters: - `candidate_top_k`: initial candidate
+retrieval size. - `rerank_top_k`: number retained after reranking. -
+`final_context_k`: chunks included in generation context.
 
-注意：特殊元素识别与主分块策略可以同时存在。
+Cold-start ranges: - FAQ: candidate 10--20, rerank 3--5, final 3--5. -
+General QA: candidate 20--40, rerank 5--10, final 4--8. -
+Technical/multi-hop: candidate 30--50, rerank 8--15, final 5--10. -
+Table/multi-evidence: candidate 30--50, rerank 8--15, final 5--12. -
+Code: candidate 20--40, rerank 5--10, final 3--8.
 
-例如，问答型文档可以同时包含代码和表格。此时应以问答对为主要组织单位，在答案内部保护代码块和表格，而不是简单地在问答策略与代码策略之间二选一。
+Adjust with measured Recall@K saturation, MRR/nDCG, citation accuracy,
+latency, and context budget. If retrieval evaluation is absent, label
+TopK as a cold-start recommendation.
 
-### Step 3：计算候选参数
+Approximate context budget bound:
 
-针对 Chunk Size、Overlap、上下文窗口等参数分别生成候选值。
+`max_context_chunks = floor((generation_context_tokens - reserved_prompt_tokens) / average_actual_chunk_tokens)`
 
-每个候选值必须说明：
+This constrains final context count, not necessarily candidate TopK.
 
-- 使用了哪些指标。
-- 命中了哪条推荐规则。
-- 为什么选择这个数值。
-- 哪些因素可能使该数值需要调整。
-- 该参数是初始建议、强约束还是待验证参数。
+### P9 --- Validate and explain
 
-### Step 4：处理规则冲突
+Validate: - all numeric values against configured ranges; - separators
+are compatible with the chosen strategy; - QA/code/table preservation
+flags are consistent with element handlers; - chunk and overlap units
+are explicit; - `source_mapping_coverage` is sufficient for
+citation-required workflows; - header/footer removal is
+evidence-backed; - final context K respects context budget; - warnings
+exist for low confidence, missing metrics, oversize atomic elements, and
+untested TopK.
 
-按照以下优先级处理冲突：
+Return parameter-specific reasons, not a single unexplained confidence
+score.
 
-P0：数据正确性、解析质量和来源可追溯性。
+## 6. Conflict priority
 
-P1：问答对应关系、代码语法、表格结构、条款完整性等特殊元素约束。
+Use this order when recommendations conflict:
 
-P2：文档类型对应的主分块策略。
+1.  Parsing quality, source integrity, and safety.
+2.  Semantic atom integrity (QA, code, table, figure-caption, legal
+    clause).
+3.  Primary document strategy.
+4.  Chunk size and separator configuration.
+5.  Overlap.
+6.  Retrieval TopK and context budget.
+7.  Header/footer cleanup and optional enrichment.
+8.  Final validation and user confirmation.
 
-P3：标题、段落和语义边界。
+A later rule must not override a higher-priority requirement. For
+example, `chunk_size=350` must not cause a QA pair or function to be
+split if a type-aware alternative exists.
 
-P4：Chunk Size、Overlap 和分隔符等普通参数。
+## 7. Output contract
 
-P5：表格和图片上下文窗口、模板噪声处理。
+Return valid JSON with this shape. Use `null` for unknown values and
+provide warnings for missing data; do not fabricate metrics.
 
-P6：分块后的统计、校验与降级。
-
-高优先级规则不能被低优先级规则覆盖。
-
-例如，Chunk Size 为 350 Tokens 时，不得为了让一个完整问答对符合 350 Tokens 而强行拆散问题和答案。
-
-### Step 5：生成最终策略
-
-输出完整 JSON 配置、每个参数的推荐理由、风险提示和待验证事项。
-
-### Step 6：验证推荐是否可执行
-
-检查：
-
-- 所有参数是否符合允许范围。
-- 分隔符是否符合目标切分器的语法。
-- 是否保护了特殊元素。
-- 是否为每个 Chunk 保留原文出处。
-- 是否存在过短块、超长块、空块或异常重复。
-- 推荐结果是否需要实际分块预览才能最终确认。
-
----
-
-## 5. Chunk Size 推荐标准
-
-Chunk Size 是需要重点分析的参数。
-
-所有 Chunk Size 均以 Tokens 为单位。不得混淆字符数、字节数与 Token 数。
-
-### 5.1 初始候选范围
-
-以下范围是可用于第一版规则引擎的工程启发式，不是普适的最优值。
-
-| 文档类型 | 初始候选范围 |
-|---|---:|
-| FAQ、短问答 | 128–350 Tokens |
-| 普通说明文档 | 350–550 Tokens |
-| 技术文档、产品手册 | 400–700 Tokens |
-| 论文、长篇报告 | 500–800 Tokens |
-| 合同、规章、法律条款 | 300–700 Tokens |
-| 代码文档 | 300–700 Tokens |
-| 表格密集型文档 | 根据表格行组和表头完整性决定 |
-| 极短文本 | 允许小于上述范围，不为凑长度而拼接无关内容 |
-
-这些范围仅用于生成候选值，最终推荐还必须结合段落分布、特殊元素和检索目标。
-
-### 5.2 根据段落长度分布调整
-
-分析以下指标：
-
-- `avg_paragraph_tokens`
-- `p50_paragraph_tokens`
-- `p90_paragraph_tokens`
-- `p95_paragraph_tokens`
-- `max_paragraph_tokens`
-- `long_paragraph_ratio`
-
-建议遵循以下规则：
-
-1. 如果 P90 明显低于候选 Chunk Size，说明大部分段落能够完整放入目标块，但仍需要检查段落之间的语义关联。
-2. 如果 P90 接近或超过候选 Chunk Size，考虑提高 Chunk Size，或者采用结构感知分块。
-3. 如果 P95 或最大段落长度远高于 P90，先检查是否存在超长列表、代码块、表格或 OCR 拼接错误，不要仅根据最大值放大所有 Chunk。
-4. 如果段落很短且标题层级清晰，优先按标题或语义边界合并相邻段落。
-5. 如果段落很长，优先按自然段落、句子或特殊元素边界拆分。
-6. 如果长段落主要是代码、表格或问答答案，应使用对应的特殊元素规则，而不是普通文本切分规则。
-
-### 5.3 根据检索粒度调整
-
-Chunk Size 不仅由文档长度决定，还取决于希望检索的证据粒度。
-
-- 用户需要精准定位某个问题、条款或配置项时，倾向于较小且完整的语义单元。
-- 用户需要较完整的章节背景、论证过程或技术说明时，可以考虑较大的 Chunk。
-- 文档包含很多独立事实时，避免将无关主题合并到同一个 Chunk。
-- 文档中的定义、前置条件和结论存在紧密联系时，应优先保留这些联系。
-
-如果没有查询集或检索评估数据，不得声称某个 Chunk Size 是经过检索效果验证的最优值。
-
-### 5.4 目标大小与硬性上限
-
-必须区分：
-
-- `chunk_size`：目标分块大小。
-- `max_chunk_tokens`：触发进一步拆分或告警的软性上限。
-- `atomic_element_max_tokens`：单个不可拆分元素允许的最大 Token 数。
-
-特殊元素超出目标值时，应优先采用语义边界进行拆分，而不是直接截断。
-
----
-
-## 6. Overlap 推荐标准
-
-Overlap 应根据上下文连续性决定，不能机械地设置为固定百分比。
-
-### 6.1 初始推荐范围
-
-| 文档情况 | 初始 Overlap |
-|---|---:|
-| 完整问答对 | 0% |
-| 标题和段落边界清晰 | 0–8% |
-| 普通连续文本 | 8–12% |
-| 跨块上下文依赖明显 | 10–15% |
-| 高度依赖前后文的长文本 | 可测试 10–20% |
-| 表格和代码 | 优先结构完整性，不依赖普通文本 Overlap |
-
-### 6.2 调整规则
-
-- 如果每个 Chunk 已经是完整问答对或完整条款，优先采用 0%。
-- 如果分块后定义、条件或结论经常被分离，考虑增加 Overlap。
-- 如果相邻 Chunk 重复内容较多，降低 Overlap。
-- 如果 Chunk 之间通过父子关系或上下文窗口恢复关联，减少不必要的重叠。
-- 如果使用语义切分，不应为了维持固定比例而破坏自然边界。
-
-输出时同时给出：
-
-- `overlap_percent`
-- `overlap_tokens`
-- `overlap_mode`
-
-其中 `overlap_mode` 可为 `fixed_tokens`、`ratio` 或 `boundary_based`。
-
-如果底层切分器只支持其中一种模式，必须转换成其实际支持的配置。
-
----
-
-## 7. 表格上下文窗口推荐标准
-
-表格上下文窗口用于将表格与周围的解释性文字关联起来，不等于表格本身的大小。
-
-### 7.1 初始推荐范围
-
-| 表格情况 | 初始窗口 |
-|---|---:|
-| 没有表格 | 0 Tokens |
-| 表格语义自包含 | 0–64 Tokens |
-| 表格需要前后文解释 | 64–128 Tokens |
-| 复杂指标表、统计表或规格表 | 128–256 Tokens |
-| 大型跨页表格 | 根据表格拆分结果进一步评估 |
-
-### 7.2 使用规则
-
-分析：
-
-- `table_count`
-- `table_token_ratio`
-- `large_table_ratio`
-- 表头识别质量
-- 表格行列结构质量
-- 单位、时间范围和统计口径是否存在于表格之外
-
-表格 Token 占比高，不代表一定需要增大上下文窗口。如果表格本身包含完整表头和单位，过大的窗口可能引入噪声。
-
-对于大型表格，应优先恢复表格结构，并在拆分后的每个子表中保留必要表头。
-
----
-
-## 8. 图片上下文窗口推荐标准
-
-图片上下文窗口用于关联图片周围的文本，不是图片像素、文件大小或视觉模型输入 Token 数。
-
-### 8.1 初始推荐范围
-
-| 图片情况 | 初始窗口 |
-|---|---:|
-| 没有图片或仅有装饰图片 | 0 Tokens |
-| 图片具有完整图注 | 0–64 Tokens |
-| 图片依赖周围正文解释 | 64–128 Tokens |
-| 流程图、架构图或复杂图表 | 128–256 Tokens |
-
-### 8.2 使用规则
-
-分析：
-
-- `image_count`
-- `image_density`
-- `figure_caption_coverage`
-- `vision_description_coverage`
-- 图片类型和语义价值
-- 图片附近文本的 Token 分布
-
-对于流程图、架构图和数据图表，优先保留图注、图片描述和必要的周边正文。
-
-对于纯装饰图片，不应因为图片数量较多而创建无意义的文本 Chunk。
-
-如果图片没有可用描述，应提出 OCR、视觉理解或人工补充建议，而不是编造图片内容。
-
----
-
-## 9. Delimiters 推荐标准
-
-分隔符需要与文档类型和目标切分器匹配。
-
-### 普通中文文本
-
-优先使用段落换行，再使用句末标点。
-
-候选值：
-
-- `\n\n`
-- `\n`
-- `。`
-- `！`
-- `？`
-- `；`
-
-### Markdown
-
-优先识别：
-
-- `#`
-- `##`
-- `###`
-- 空行
-- 列表边界
-- 代码围栏
-
-### FAQ
-
-优先使用问题与答案的识别边界，不应只依靠句末标点。
-
-### 合同和规章
-
-优先使用章节编号、条款编号、款项编号和完整条款边界。
-
-### 代码
-
-优先使用代码围栏、函数、类、方法和语法树节点。
-
-不得使用普通文本分隔符直接拆散代码语法结构。
-
-### 表格
-
-优先使用表格边界、行列关系和表头，不应使用普通标点直接切开单元格。
-
-输出时应给出分隔符数组、优先级以及对应的特殊元素规则。
-
----
-
-## 10. 是否使用子块检索
-
-子块检索的核心是使用较小的子块进行精准召回，再关联父块提供上下文。
-
-### 推荐开启的条件
-
-- 长篇技术文档具有清晰的父子层级。
-- 一个较大的父块包含多个独立主题。
-- 检索需要精确定位到函数、条款、章节中的局部内容。
-- 查询评估显示小块召回更精准，而父块能够补充足够上下文。
-
-### 推荐关闭的条件
-
-- 文档主要由短问答对组成。
-- 单个 Chunk 已经是完整且精准的检索单元。
-- 文档很短，父子关系不会带来明显收益。
-- 系统尚未实现父子块关联和去重机制。
-
-如果开启，必须同时输出：
-
-- `use_sub_chunks_for_retrieval`
-- `parent_chunk_size`
-- `sub_chunk_size`
-- `parent_child_relation`
-- `retrieval_return_mode`
-
-不得只打开开关而没有定义父块和子块的关系。
-
----
-
-## 11. 页眉页脚与模板噪声处理
-
-需要结合以下指标：
-
-- `header_footer_repeat_rate`
-- `boilerplate_ratio`
-- 文本在页面中的位置
-- 重复文本相似度
-- 文本是否包含文档编号、版本号、保密等级或法律声明
-
-### 推荐规则
-
-- 高重复率、位置稳定且内容为模板信息：推荐移除。
-- 内容包含业务标识、文档编号或重要声明：保留或独立存储。
-- 仅检测到疑似噪声，但证据不足：只标记，不自动删除。
-- 不得直接删除原始文件内容。
-- 所有移除操作必须保留可审计记录。
-
-输出字段：
-
-- `remove_headers_footers`
-- `header_footer_removal_mode`
-- `removal_confidence`
-- `preserved_patterns`
-- `removed_text_records`
-
----
-
-## 12. OCR 与解析质量规则
-
-OCR 页面比例主要影响解析工作流和质量门控，不应直接决定 Chunk Size。
-
-### 推荐处理
-
-- OCR 置信度较高、阅读顺序可靠：允许继续结构感知分块。
-- OCR 置信度较低：降低相关页面的结构化推荐置信度。
-- 阅读顺序异常：避免未经校验地拼接多栏文字。
-- 表格识别质量低：优先重试表格识别或采用保守文本策略。
-- 关键内容缺失：暂停自动入库或请求人工确认。
-
-质量阈值必须可配置。没有经过校准的数据时，不得声称某个置信度阈值适用于所有 OCR 模型。
-
----
-
-## 13. 推荐评分与置信度
-
-必须区分两种概念：
-
-1. `recommendation_confidence`：当前推荐是否有足够证据支持。
-2. `retrieval_quality_score`：该策略在真实检索任务中的表现。
-
-二者不能混为一谈。
-
-### 推荐置信度的组成
-
-可从以下维度计算：
-
-- 输入指标完整度。
-- 文档类型识别置信度。
-- 标题和段落结构可靠性。
-- OCR、表格、图片解析质量。
-- 规则匹配的明确程度。
-- 是否存在尚未解决的策略冲突。
-
-初版可以采用加权评分，但必须输出各项依据。
-
-如果缺失关键指标，应降低相关参数的置信度，而不是输出虚假的高置信度。
-
-如果没有实际检索评估结果，`retrieval_quality_score` 应为 `null`。
-
----
-
-## 14. 最终输出格式
-
-最终输出必须包含以下字段：
-
-```json
+``` json
 {
   "schema_version": "1.0",
   "rule_version": "chunk-advisor-1.0.0",
-  "document_profile_summary": {},
-  "recommended_strategy": {
-    "chunking_method": "",
-    "chunk_size": 0,
-    "chunk_size_unit": "tokens",
-    "max_chunk_tokens": 0,
-    "overlap_percent": 0,
-    "overlap_tokens": 0,
-    "overlap_mode": "boundary_based",
-    "table_context_window": 0,
-    "image_context_window": 0,
-    "delimiters": [],
-    "use_sub_chunks_for_retrieval": false,
-    "parent_chunk_size": null,
-    "sub_chunk_size": null,
-    "remove_headers_footers": false,
-    "header_footer_removal_mode": "confirmed_only"
-  },
-  "special_element_rules": {
-    "qa": {},
-    "code": {},
-    "table": {},
-    "image": {}
-  },
-  "parameter_explanations": [
-    {
-      "parameter": "chunk_size",
-      "recommended_value": 0,
-      "supporting_metrics": [],
-      "matched_rules": [],
-      "reason": "",
-      "confidence": 0.0
+  "status": "recommended",
+  "strategy": {
+    "primary": "qa",
+    "elements": {
+      "code": "code_aware",
+      "table": "table_aware",
+      "image": "caption_linked"
     }
-  ],
-  "conflicts": [],
-  "warnings": [],
-  "validation_requirements": [],
-  "recommendation_confidence": 0.0,
-  "retrieval_quality_score": null,
-  "requires_preview": true
+  },
+  "chunking": {
+    "size": 350,
+    "size_unit": "tokens",
+    "max_size": 700,
+    "max_size_is_hard_limit": false,
+    "overlap_percent": 0,
+    "overlap_unit": "tokens",
+    "separators": ["<qa_pair_boundary>", "\n\n", "\n", "。", "！", "？"],
+    "respect_heading_boundaries": true,
+    "preserve_qa_pairs": true,
+    "preserve_code_blocks": true,
+    "preserve_table_headers": true,
+    "preserve_image_caption_relation": true
+  },
+  "context": {
+    "table_window_tokens": 128,
+    "image_window_tokens": 96,
+    "include_heading_path": true,
+    "include_source_metadata": true
+  },
+  "retrieval": {
+    "candidate_top_k": 30,
+    "rerank_top_k": 8,
+    "final_context_k": 5,
+    "basis": "cold_start",
+    "enable_reranking": true
+  },
+  "preprocessing": {
+    "remove_headers_footers": true,
+    "header_footer_removal_mode": "confirmed_only",
+    "require_source_mapping": true
+  },
+  "validation": {
+    "min_chunk_tokens": 20,
+    "warn_above_tokens": 700,
+    "qa_pair_integrity": true,
+    "table_header_integrity": true,
+    "source_mapping_required": true
+  },
+  "parameter_reasons": {
+    "chunk_size": ["Reason tied to measured paragraph distribution and document type"],
+    "overlap_percent": ["Reason tied to semantic boundary continuity"],
+    "separators": ["Reason tied to detected structure"],
+    "top_k": ["Cold-start until retrieval evaluation is available"]
+  },
+  "warnings": []
 }
 ```
 
-字段要求：
+`<qa_pair_boundary>` is a symbolic placeholder for a parser-level
+boundary, not a literal text separator. The backend must map it to the
+actual element boundary representation.
 
-- `supporting_metrics` 必须引用实际输入指标。
-- `matched_rules` 必须对应规则 ID。
-- `reason` 必须说明指标如何影响参数。
-- `confidence` 应反映该参数推荐的证据强度。
-- `warnings` 记录识别风险和未解决的冲突。
-- `requires_preview` 在尚未执行真实分块时应为 `true`。
-- 不得把示例值当成实际推荐值。
-- 最终 JSON 必须可以通过 JSON Parser 解析。
+## 8. Response behavior
 
----
+When given metrics: 1. Summarize the document profile in 2--5 bullet
+points. 2. List missing or unreliable metrics. 3. Recommend the primary
+and element-level strategies. 4. Return the full JSON configuration. 5.
+Explain each major parameter using the specific input metrics. 6. List
+warnings and validation steps. 7. Clearly distinguish rules-based
+decisions from AI inferences. 8. If asked for "optimal" parameters
+without retrieval evaluation, say "recommended initial configuration,"
+not "proven optimal configuration."
 
-## 15. 推荐输出的解释要求
+## 9. Example for mixed QA/code/table content
 
-推荐结果不能只输出参数表。
+Given: - clear headings, - table token ratio = 0.20, - image density =
+0.10, - P90 paragraph tokens = 260, - OCR page ratio = 0.10, - QA
+document = true, - code dense = true, - confirmed template noise = true,
 
-每个核心参数都必须回答：
+and QA/code detection confidence \>= 0.80, a reasonable initial
+recommendation is: - primary strategy `qa`; - element handlers
+`code_aware`, `table_aware`, and `caption_linked`; - chunk size 350
+tokens; - overlap 0%; - table context 128 tokens; - image context 96
+tokens; - candidate/rerank/final TopK = 30/8/5 as cold-start values; -
+OCR pages checked for parsing quality; - remove only confirmed template
+noise.
 
-1. 推荐了什么数值？
-2. 哪些指标影响了这个数值？
-3. 为什么没有选择更小或更大的数值？
-4. 哪些结构边界优先于这个数值？
-5. 哪种情况下需要重新调整？
-6. 如何在真实分块预览中验证？
-
-例如：
-
-“推荐 Chunk Size 为 350 Tokens。依据是文档为问答型，P90 段落长度为 260 Tokens，且问答对可作为自然检索单元。350 Tokens 是初始目标，而非硬性截断上限。超过目标值时优先在答案的自然段落边界拆分；如果包含代码，则采用代码结构边界。若大量完整问答对超过 350 Tokens，应重新评估目标大小或父子块方案。”
-
-这种解释比“因为文档是 FAQ，所以推荐 350”更符合本 Skill 的目标。
-
----
-
-## 16. 执行约束
-
-执行本 Skill 时，必须遵循以下约束：
-
-1. 先分析数据，再给出参数。
-2. 不允许仅依据文档类型输出固定参数。
-3. 不允许编造缺失指标。
-4. 不允许把经验阈值描述成经过验证的最优值。
-5. 不允许让低优先级的 Chunk Size 规则破坏高优先级的语义结构。
-6. 不允许在没有证据时自动删除可能具有业务价值的页眉页脚。
-7. 不允许把图片上下文窗口等同于视觉模型的图像 Token。
-8. 不允许把推荐置信度等同于检索效果。
-9. 所有核心参数必须给出推荐理由。
-10. 所有正式入库策略必须经过真实分块预览和参数校验。
-11. 应优先复用现有解析结果，避免仅修改分块参数就重新执行整份文档的 OCR。
-12. 当推荐无法可靠确定时，应返回候选策略、风险和待补充信息，而不是强行给出唯一答案。
-
-## 17. Skill 成功标准
-
-一次成功的执行应满足：
-
-- 推荐参数符合输入指标与文档结构。
-- 所有参数都有可追溯的推荐依据。
-- 冲突按照既定优先级处理。
-- 特殊元素具有明确的保护策略。
-- 参数范围和配置格式通过校验。
-- 用户能够理解并修改推荐结果。
-- 真实分块预览能够验证推荐策略。
-- 后续可以通过 Recall@K、MRR、引用准确率、分块完整率和索引成本等数据持续改进规则。
-
-最终目标不是让 AI 猜出一组数字，而是构建一个**指标驱动、可解释、可验证、可持续优化的 RAG 分块策略推荐系统**。
+This is a starting recommendation. It must be validated with real chunk
+previews and retrieval evaluation before being treated as optimal.
