@@ -134,29 +134,33 @@ def search(tenant_id, kb_id, query, top_k=None):
             top_k = config.RETRIEVAL_TOP_K
     top_k = max(1, min(int(top_k), 100))
 
-    if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
+    try:
+        if not _get_client().indices.exists(index=config.ELASTICSEARCH_INDEX):
+            return []
+        query_vector = embeddings.embed_texts([query])[0].tolist()
+        _ensure_index(len(query_vector))
+        response = _get_client().search(
+            index=config.ELASTICSEARCH_INDEX,
+            knn={
+                "field": "embedding",
+                "query_vector": query_vector,
+                "k": top_k,
+                "num_candidates": max(top_k * 10, 100),
+                "filter": {"bool": {"filter": [
+                    {"term": {"tenant_id": tenant_id}},
+                    {"term": {"kb_id": kb_id}},
+                ]}},
+            },
+            source=["filename", "content"],
+        )
+        return [{
+            "filename": hit["_source"]["filename"],
+            "content": hit["_source"]["content"],
+            "score": float(hit["_score"]),
+        } for hit in response["hits"]["hits"]]
+    except Exception:
+        # Elasticsearch / Embedding 连接异常时降级为空结果，避免中断对话流。
         return []
-    query_vector = embeddings.embed_texts([query])[0].tolist()
-    _ensure_index(len(query_vector))
-    response = _get_client().search(
-        index=config.ELASTICSEARCH_INDEX,
-        knn={
-            "field": "embedding",
-            "query_vector": query_vector,
-            "k": top_k,
-            "num_candidates": max(top_k * 10, 100),
-            "filter": {"bool": {"filter": [
-                {"term": {"tenant_id": tenant_id}},
-                {"term": {"kb_id": kb_id}},
-            ]}},
-        },
-        source=["filename", "content"],
-    )
-    return [{
-        "filename": hit["_source"]["filename"],
-        "content": hit["_source"]["content"],
-        "score": float(hit["_score"]),
-    } for hit in response["hits"]["hits"]]
 
 
 def get_document_chunks(tenant_id, doc_id, limit=5):
