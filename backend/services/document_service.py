@@ -124,8 +124,8 @@ def reparse_document(tenant_id: str, doc_id: str, parse_method: str = "plain") -
     return {"document": document_repository.get_document(tenant_id, doc_id), "chunk_count": chunk_count}
 
 
-def document_size_index_analyse(tenant_id: str, doc_id: str) -> dict:
-    """读取原始文件并计算「文档规模指标」（只读，不修改索引）。"""
+def _read_document(tenant_id: str, doc_id: str):
+    """读取文档记录与原始文件字节，返回 (doc, data)。"""
     doc = document_repository.get_document(tenant_id, doc_id)
     if not doc:
         raise DocumentIngestionError("文档不存在", 404)
@@ -138,10 +138,25 @@ def document_size_index_analyse(tenant_id: str, doc_id: str) -> dict:
         raise DocumentIngestionError("原始文件不存在，无法分析", 404)
     with open(path, "rb") as uploaded_file:
         data = uploaded_file.read()
+    return doc, data
 
+
+def _extract_text(doc: dict, data: bytes) -> str:
     try:
-        text = (parsing.extract_text(doc["filename"], data) or "").strip()
+        return (parsing.extract_text(doc["filename"], data) or "").strip()
     except Exception as exc:
         raise DocumentIngestionError(f"解析文件失败：{exc}") from exc
 
+
+def document_size_index_analyse(tenant_id: str, doc_id: str) -> dict:
+    """读取原始文件并计算「文档规模指标」（只读，不修改索引）。"""
+    doc, data = _read_document(tenant_id, doc_id)
+    text = _extract_text(doc, data)
     return analysis.compute_document_size_index(doc["filename"], data, text)
+
+
+def structure_index_analyse(tenant_id: str, doc_id: str) -> dict:
+    """读取原始文件并计算「结构化程度指标」（只读，不修改索引）。"""
+    doc, data = _read_document(tenant_id, doc_id)
+    text = _extract_text(doc, data)
+    return analysis.compute_structure_index(doc["filename"], data, text)

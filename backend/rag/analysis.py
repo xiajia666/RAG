@@ -99,3 +99,126 @@ def compute_document_size_index(filename: str, data: bytes, text: str) -> dict:
         "short_element_count": short_count,
         "long_element_count": long_count,
     }
+
+
+# ---------- 结构化程度指标 ----------
+
+# 标题 / 列表 / 问答 识别正则（启发式，需按实际文档校准）
+_HEADING_MD = re.compile(r"^(#{1,6})\s+\S")
+_HEADING_CN_CHAPTER = re.compile(r"^第[一二三四五六七八九十百零0-9]+[章节篇部分]")
+_HEADING_NUMBERED = re.compile(r"^(\d+(?:\.\d+)+)[\s、.)）]")
+_HEADING_CN_NUM = re.compile(r"^[一二三四五六七八九十]+、\s*\S")
+_LIST_ITEM = re.compile(r"^\s*(?:[-*•·]|\d+[、.)]|[(（]\d+[)）]|[一二三四五六七八九十]+[、])\s*\S")
+_QA_Q = re.compile(r"^(?:Q|问)\s*[:：]\s*\S", re.IGNORECASE)
+_QA_A = re.compile(r"^(?:A|答)\s*[:：]\s*\S", re.IGNORECASE)
+
+
+def _classify_line(line: str):
+    """把一行文本归类，返回 (类型, 层级)。类型 ∈ heading/list/question/answer/body。
+
+    标题识别采用启发式：Markdown #、第X章/节、多级编号（1.1/1.1.1）、
+    短的中文数字标题（一、二、…且不以句末标点结尾）。
+    """
+    s = line.strip()
+    m = _HEADING_MD.match(s)
+    if m:
+        return "heading", len(m.group(1))
+    if _HEADING_CN_CHAPTER.match(s):
+        level = 1 if any(ch in s[:8] for ch in "章篇") else 2
+        return "heading", level
+    m = _HEADING_NUMBERED.match(s)
+    if m:
+        return "heading", m.group(1).count(".") + 1
+    if _HEADING_CN_NUM.match(s) and len(s) <= 40 and not s.endswith(("。", "！", "？", ".", "!", "?")):
+        return "heading", 1
+    if _QA_Q.match(s) or s.endswith("?") or s.endswith("？"):
+        return "question", None
+    if _QA_A.match(s):
+        return "answer", None
+    if _LIST_ITEM.match(s):
+        return "list", None
+    return "body", None
+
+
+def compute_structure_index(filename: str, data: bytes, text: str) -> dict:
+    """计算结构化程度指标。
+
+    指标：
+    - heading_density     标题数 / 1000 正文 Token
+    - heading_level_count 识别到的有效标题层级数
+    - heading_coverage    能关联到标题路径的正文 Token / 正文 Token 总数
+    - paragraph_count     正文段落数
+    - list_ratio          列表内容 Token / 正文 Token
+    - qa_ratio            问答对内容 Token / 正文 Token
+    """
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    empty = {
+        "filename": filename,
+        "heading_density": 0.0,
+        "heading_level_count": 0,
+        "heading_coverage": 0.0,
+        "paragraph_count": 0,
+        "list_ratio": 0.0,
+        "qa_ratio": 0.0,
+        "heading_count": 0,
+        "body_tokens": 0,
+        "heading_tokens": 0,
+        "list_tokens": 0,
+        "qa_tokens": 0,
+    }
+    if not lines:
+        return empty
+
+    kinds = [_classify_line(line) for line in lines]
+
+    # 把「问句」后面紧跟的正文/列表行归为「答案」，一并纳入问答内容
+    for i in range(len(kinds) - 1):
+        if kinds[i][0] == "question" and kinds[i + 1][0] in ("body", "list"):
+            kinds[i + 1] = ("answer", None)
+
+    tok = estimate_tokens
+    heading_tokens = sum(tok(lines[i]) for i in range(len(lines)) if kinds[i][0] == "heading")
+    body_tokens = sum(tok(lines[i]) for i in range(len(lines)) if kinds[i][0] != "heading")
+
+    heading_count = sum(1 for kind, _ in kinds if kind == "heading")
+    heading_levels = {level for kind, level in kinds if kind == "heading" and level}
+
+    # heading_coverage：处于某个标题路径下的正文 token 占比
+    covered = 0
+    in_section = False
+    for i in range(len(lines)):
+        kind = kinds[i][0]
+        if kind == "heading":
+            in_section = True
+        elif in_section:
+            covered += tok(lines[i])
+
+    # paragraph_count：连续的 body 行合并为一个段落
+    paragraph_count = 0
+    prev_body = False
+    for kind, _ in kinds:
+        if kind == "body":
+            if not prev_body:
+                paragraph_count += 1
+            prev_body = True
+        else:
+            prev_body = False
+
+    list_tokens = sum(tok(lines[i]) for i in range(len(lines)) if kinds[i][0] == "list")
+    qa_tokens = sum(tok(lines[i]) for i in range(len(lines)) if kinds[i][0] in ("question", "answer"))
+
+    return {
+        "filename": filename,
+        "heading_density": round(heading_count * 1000 / body_tokens, 2) if body_tokens else 0.0,
+        "heading_level_count": len(heading_levels),
+        "heading_coverage": round(covered / body_tokens, 4) if body_tokens else 0.0,
+        "paragraph_count": paragraph_count,
+        "list_ratio": round(list_tokens / body_tokens, 4) if body_tokens else 0.0,
+        "qa_ratio": round(qa_tokens / body_tokens, 4) if body_tokens else 0.0,
+        # 辅助字段
+        "heading_count": heading_count,
+        "body_tokens": body_tokens,
+        "heading_tokens": heading_tokens,
+        "list_tokens": list_tokens,
+        "qa_tokens": qa_tokens,
+    }

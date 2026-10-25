@@ -47,6 +47,21 @@ export interface DocumentMetrics {
   long_element_count: number
 }
 
+export interface StructureMetrics {
+  filename: string
+  heading_density: number
+  heading_level_count: number
+  heading_coverage: number
+  paragraph_count: number
+  list_ratio: number
+  qa_ratio: number
+  heading_count: number
+  body_tokens: number
+  heading_tokens: number
+  list_tokens: number
+  qa_tokens: number
+}
+
 export interface Session {
   id: string
   title: string

@@ -118,3 +118,16 @@ def document_size_index_analyse(doc_id: str, user=CurrentUser()):
         return document_service.document_size_index_analyse(user["tenant_id"], doc_id)
     except document_service.DocumentIngestionError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+# 结构化程度指标：计算标题、段落、列表、问答等结构特征（只读）。
+@api.get('/api/documents/{doc_id}/structure_index_analyse')
+def structure_index_analyse(doc_id: str, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user)
+    try:
+        return document_service.structure_index_analyse(user["tenant_id"], doc_id)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
