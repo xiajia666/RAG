@@ -30,3 +30,12 @@ docker run -d \
   -v /data/qdrant:/qdrant/storage \
   -e QDRANT__SERVICE__API_KEY=123456 \
   qdrant/qdrant:latest
+
+--------------------------------------------- 启动 Es--------------------------------------------
+docker run -p 127.0.0.1:9200:9200 -d --name elasticsearch \
+  -e "discovery.type=single-node" \
+  -e "xpack.security.enabled=true" \
+  -e "ELASTIC_PASSWORD="" \
+  -e "xpack.license.self_generated.type=trial" \
+  -v "elasticsearch-data:/usr/share/elasticsearch/data" \
+  docker.elastic.co/elasticsearch/elasticsearch:8.15.0
