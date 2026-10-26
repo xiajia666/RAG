@@ -117,7 +117,8 @@ def delete_kb(kb_id: str, user=AdminUser()):
     docs = db.query(select(db.Document.id, db.Document.filename).where(
         db.Document.tenant_id == user["tenant_id"], db.Document.kb_id == kb_id
     ))
-    # 级联删除 docs / chunks / sessions / messages
+    # ES 切片不受 MySQL 外键级联管理，先删除向量索引再删除业务数据。
+    vector_store.delete_knowledge_base(user["tenant_id"], kb_id)
     db.execute(delete(db.KnowledgeBase).where(
         db.KnowledgeBase.id == kb_id, db.KnowledgeBase.tenant_id == user["tenant_id"]
     ))
@@ -136,14 +137,16 @@ def list_documents(kb_id: str, user=CurrentUser()):
     )
 
 
-# 上传文档并执行解析、分块和向量入库。
+# 上传文档并执行解析、分块和向量入库。解析方式由表单字段 parse_method 指定：
+# plain（纯文本，默认）/ deepdoc（DeepDocs，暂未开放）/ none（仅上传不解析）。
 @api.post('/api/kbs/{kb_id}/documents')
-def upload_document(kb_id: str, file,
+def upload_document(kb_id: str, file, request,
                           user=CurrentUser()):
     get_kb_for_user(kb_id, user, write=True)
+    parse_method = (request.form.get('parse_method') or 'plain').strip().lower()
     try:
         return document_service.ingest_document(
-            user["tenant_id"], kb_id, file.filename, file.read()
+            user["tenant_id"], kb_id, file.filename, file.read(), parse_method
         )
     except document_service.DocumentIngestionError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc

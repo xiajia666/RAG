@@ -1,5 +1,6 @@
 """文档解析：从上传的文件中提取纯文本。"""
 import io
+import os
 
 
 def extract_text(filename, data):
@@ -27,6 +28,12 @@ def _decode_text(data):
 
 
 def _extract_pdf(data):
+    # 优先走 DeepDoc 深度解析（版面 + OCR + 表格）；未启用或失败则回退到 pypdf。
+    if _deepdoc_enabled():
+        text = _try_deepdoc_pdf(data)
+        if text and text.strip():
+            return text
+
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(data))
@@ -37,6 +44,30 @@ def _extract_pdf(data):
         except Exception:
             pages.append("")
     return "\n".join(pages)
+
+
+def _deepdoc_enabled() -> bool:
+    try:
+        from core import config
+        return bool(getattr(config, "DEEP_DOC_ENABLED", False))
+    except Exception:
+        return False
+
+
+def _try_deepdoc_pdf(data) -> str:
+    """尝试用 DeepDoc 解析 PDF；任何失败都静默返回空串以触发回退。"""
+    try:
+        from core import config
+        model_dir = config.DEEP_DOC_MODEL_DIR
+        if not all(
+            os.path.isfile(os.path.join(model_dir, name))
+            for name in ("det.ort", "rec.ort", "layout.ort", "tsr.ort", "ocr.res")
+        ):
+            return ""
+        from rag.parse_method import parse_pdf
+        return parse_pdf(data, model_dir)
+    except Exception:
+        return ""
 
 
 def _extract_docx(data):

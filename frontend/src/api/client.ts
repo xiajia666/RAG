@@ -1,4 +1,4 @@
-import type { Document, StreamMeta } from './types'
+import type { ChunkingRecommendation, ContentTypeMetrics, Document, DocumentMetrics, StreamMeta, StructureMetrics } from './types'
 
 const TOKEN_KEY = 'rag_token'
 
@@ -24,6 +24,76 @@ export class ApiError extends Error {
     super(message)
     this.status = status
   }
+}
+
+export interface ChunkingStrategy {
+  strategy: 'fixed' | 'semantic' | 'structure_aware'
+  chunk_size: number
+  chunk_overlap: number
+  separators: string[]
+}
+
+export type ChunkMethod = 'general' | 'qa' | 'table' | 'paper' | 'book' | 'manual' | 'laws' | 'presentation' | 'email' | 'one'
+
+// 解析方式：plain=纯文本解析（原方式）；deepdoc=DeepDocs 深度解析（暂未开放）；none=仅上传不解析。
+export type ParseMethod = 'plain' | 'deepdoc' | 'none'
+
+export interface ChunkAnalysis {
+  analysis_id: string
+  filename: string
+  document_type: string
+  summary: string
+  recommendation: string
+  reasoning: string
+  estimated_chunk_count: number
+  strategy: ChunkingStrategy
+  preview: { chunk_index: number; content: string; token_count?: number }[]
+  warnings: string[]
+}
+
+export interface ChunkPreview {
+  estimated_chunk_count: number
+  preview: { chunk_index: number; content: string; token_count?: number }[]
+  warnings: string[]
+}
+
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const headers: Record<string, string> = {}
+  const token = getToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(path, { method: 'POST', headers, body: form })
+  if (res.status === 401) expireSession()
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = await res.json()
+      if (body?.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+    } catch {
+      /* ignore non-JSON errors */
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return res.json() as Promise<T>
+}
+
+export async function analyzeDocument(kbId: string, file: File, chunkMethods: ChunkMethod[]): Promise<ChunkAnalysis> {
+  const form = new FormData()
+  form.append('file', file)
+  chunkMethods.forEach(method => form.append('chunk_methods', method))
+  return postForm(`/api/kbs/${kbId}/documents/analyze`, form)
+}
+
+export async function previewDocumentChunks(
+  kbId: string,
+  analysisId: string,
+  chunkMethods: ChunkMethod[],
+  chunkingStrategy: ChunkingStrategy,
+): Promise<ChunkPreview> {
+  return api.post<ChunkPreview>(`/api/kbs/${kbId}/documents/analyze/preview`, {
+    analysis_id: analysisId,
+    chunk_methods: chunkMethods,
+    chunking_strategy: chunkingStrategy,
+  })
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -66,28 +136,55 @@ export const api = {
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 }
 
+export async function confirmAnalyzedDocument(
+  kbId: string,
+  analysisId: string,
+  chunkMethods: ChunkMethod[],
+  chunkingStrategy: ChunkingStrategy,
+  parseMethod: ParseMethod = 'plain',
+): Promise<{ document: Document; chunk_count: number }> {
+  return api.post<{ document: Document; chunk_count: number }>(`/api/kbs/${kbId}/documents/confirm`, {
+    analysis_id: analysisId,
+    chunk_methods: chunkMethods,
+    chunking_strategy: chunkingStrategy,
+    parse_method: parseMethod,
+  })
+}
+
 export async function uploadDocument(
   kbId: string,
   file: File,
+  parseMethod: ParseMethod = 'plain',
 ): Promise<{ document: Document; chunk_count: number }> {
   const form = new FormData()
   form.append('file', file)
-  const headers: Record<string, string> = {}
-  const token = getToken()
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(`/api/kbs/${kbId}/documents`, { method: 'POST', headers, body: form })
-  if (res.status === 401) expireSession()
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      if (body?.detail) detail = body.detail
-    } catch {
-      /* ignore */
-    }
-    throw new ApiError(res.status, detail)
-  }
-  return res.json()
+  form.append('parse_method', parseMethod)
+  return postForm(`/api/kbs/${kbId}/documents`, form)
+}
+
+export async function reparseDocument(
+  docId: string,
+  parseMethod: ParseMethod,
+): Promise<{ document: Document; chunk_count: number }> {
+  return api.post<{ document: Document; chunk_count: number }>(`/api/documents/${docId}/parse`, {
+    parse_method: parseMethod,
+  })
+}
+
+export async function documentSizeIndexAnalyse(docId: string): Promise<DocumentMetrics> {
+  return api.get<DocumentMetrics>(`/api/documents/${docId}/document_size_index_analyse`)
+}
+
+export async function structureIndexAnalyse(docId: string): Promise<StructureMetrics> {
+  return api.get<StructureMetrics>(`/api/documents/${docId}/structure_index_analyse`)
+}
+
+export async function contentTypeIndexAnalyse(docId: string): Promise<ContentTypeMetrics> {
+  return api.get<ContentTypeMetrics>(`/api/documents/${docId}/content_type_index_analyse`)
+}
+
+export async function chunkingRecommend(docId: string): Promise<ChunkingRecommendation> {
+  return api.post<ChunkingRecommendation>(`/api/documents/${docId}/chunking_recommend`)
 }
 
 export async function downloadDocument(docId: string, filename: string): Promise<void> {

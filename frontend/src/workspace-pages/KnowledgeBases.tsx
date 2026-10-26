@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { api, uploadDocument } from '../api/client'
+import { api } from '../api/client'
 import type { Document, KnowledgeBase } from '../api/types'
 import { useAuth } from '../store/auth'
+import ChunkingUploadFlow from '../components/ChunkingUploadFlow'
 
 type Props = { initialKbId?: string; showNew?: boolean; onNavigate: (page: string) => void }
 type Preview = { document: Document; chunks: { chunk_index: number; content: string }[] }
 type ModelInfo = { embedding_model: string; embedding_configured: boolean }
 type KbMember = { user_id: string; username: string; email?: string | null; tenant_role: string; kb_role: 'editor' | 'reader' | null }
+type UploadQueue = { kbId: string; files: File[] }
 
 export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Props) {
   const { user } = useAuth()
@@ -28,6 +30,7 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
   const [accessMode, setAccessMode] = useState<'tenant' | 'restricted'>('tenant')
   const [members, setMembers] = useState<KbMember[]>([])
+  const [uploadQueue, setUploadQueue] = useState<UploadQueue | null>(null)
 
   async function load() {
     const list = await api.get<KnowledgeBase[]>('/api/kbs')
@@ -49,25 +52,18 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
     setBusy(true); setError('')
     try {
       const created = await api.post<KnowledgeBase>('/api/kbs', { name: name.trim(), description: description.trim() })
+      const initialFiles = [...files]
       setWizard(false); setStep(0); setName(''); setDescription(''); setFiles([])
       await load(); setSelected(created)
       onNavigate(`kbs/${created.id}`)
-      const failures: string[] = []
-      for (const file of files) {
-        try { await uploadDocument(created.id, file) }
-        catch (e) { failures.push(`${file.name}: ${e instanceof Error ? e.message : '导入失败'}`) }
-      }
-      setDocs(await api.get<Document[]>(`/api/kbs/${created.id}/documents`))
-      if (failures.length) setError(`知识库已创建，以下文件导入失败：${failures.join('；')}`)
+      if (initialFiles.length) setUploadQueue({ kbId: created.id, files: initialFiles })
     } catch (e) { setError(e instanceof Error ? e.message : '创建失败') }
     finally { setBusy(false) }
   }
   async function uploadToSelected(list: FileList | null) {
     if (!selected || !list?.length) return
-    setBusy(true); setError('')
-    try { for (const file of Array.from(list)) await uploadDocument(selected.id, file); setDocs(await api.get<Document[]>(`/api/kbs/${selected.id}/documents`)); await load() }
-    catch (e) { setError(e instanceof Error ? e.message : '上传失败') }
-    finally { setBusy(false) }
+    setError('')
+    setUploadQueue({ kbId: selected.id, files: Array.from(list) })
   }
   async function saveDetails() {
     if (!selected) return
@@ -107,6 +103,7 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
       <div className="space-y-4"><section className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}><h2 className="font-semibold mb-3">成员权限</h2>{user?.role === 'admin' ? <><label className="flex gap-2 items-center text-sm mb-3"><input type="radio" checked={accessMode === 'tenant'} onChange={() => setAccessMode('tenant')} />空间成员均可访问</label><label className="flex gap-2 items-center text-sm mb-3"><input type="radio" checked={accessMode === 'restricted'} onChange={() => setAccessMode('restricted')} />仅指定成员可访问</label>{accessMode === 'restricted' && <div className="space-y-2 max-h-56 overflow-y-auto">{members.filter(member => member.tenant_role !== 'admin').map(member => <div key={member.user_id} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!member.kb_role} onChange={e => setMembers(old => old.map(item => item.user_id === member.user_id ? { ...item, kb_role: e.target.checked ? 'reader' : null } : item))} /><span className="flex-1 truncate">{member.username} {member.email ? `· ${member.email}` : ''}</span>{!!member.kb_role && <select value={member.kb_role} onChange={e => setMembers(old => old.map(item => item.user_id === member.user_id ? { ...item, kb_role: e.target.value as 'editor' | 'reader' } : item))} className="px-1 py-1 rounded" style={{ color: 'var(--color-text-2)', background: 'var(--color-surface-2)' }}><option value="editor">编辑</option><option value="reader">只读</option></select>}</div>)}</div>}<button disabled={busy} onClick={() => void saveMemberAccess()} className="mt-3 px-3 py-2 rounded-lg text-xs" style={{ color: 'var(--color-text-inv)', background: 'var(--color-cyan)' }}>保存访问权限</button></> : <p className="text-sm" style={{ color: 'var(--color-text-2)' }}>由空间管理员配置知识库成员权限。</p>}</section><section className="rounded-xl p-4 space-y-3" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}><h2 className="font-semibold">知识库参数</h2><label className="block text-xs" style={{ color: 'var(--color-text-2)' }}>名称<input value={draftName} onChange={e => setDraftName(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--color-text)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }} /></label><label className="block text-xs" style={{ color: 'var(--color-text-2)' }}>描述<textarea value={draftDescription} onChange={e => setDraftDescription(e.target.value)} rows={3} className="mt-1 w-full px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--color-text)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }} /></label><button disabled={busy || user?.role !== 'admin'} onClick={() => void saveDetails()} className="px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--color-text-inv)', background: 'var(--color-cyan)', opacity: user?.role === 'admin' ? 1 : .5 }}>保存设置</button>{user?.role === 'admin' && <button onClick={() => void removeKb()} className="ml-3 text-sm" style={{ color: 'var(--color-red)' }}>删除知识库</button>}</section></div>
     </div>
     {preview && <div className="fixed inset-0 z-50 flex justify-end" style={{ background: 'rgba(0,0,0,.55)' }}><aside className="w-full max-w-md h-full overflow-y-auto p-5" style={{ background: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)' }}><div className="flex justify-between items-center mb-5"><h2 className="font-semibold">{preview.document.filename} · 切片预览</h2><button onClick={() => setPreview(null)}>关闭</button></div><div className="space-y-3">{preview.chunks.map(chunk => <article key={chunk.chunk_index} className="p-3 rounded-lg text-sm leading-6" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><div className="text-xs mb-2" style={{ color: 'var(--color-cyan)' }}>片段 #{chunk.chunk_index + 1}</div>{chunk.content}</article>)}</div></aside></div>}
+    {uploadQueue && <ChunkingUploadFlow key={uploadQueue.kbId} kbId={uploadQueue.kbId} files={uploadQueue.files} onClose={() => { const uploadedKbId = uploadQueue.kbId; setUploadQueue(null); if (selected?.id === uploadedKbId) void api.get<Document[]>(`/api/kbs/${uploadedKbId}/documents`).then(setDocs).catch(e => setError(e.message)) }} onComplete={async () => { const uploadedKbId = uploadQueue.kbId; if (selected?.id === uploadedKbId) setDocs(await api.get<Document[]>(`/api/kbs/${uploadedKbId}/documents`)); await load() }} />}
   </div>
 
   return <div className="flex-1 overflow-y-auto p-6 animate-fade-in">

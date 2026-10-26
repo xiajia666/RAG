@@ -22,6 +22,15 @@ MYSQL_SSL = os.getenv("MYSQL_SSL", "false").strip().lower() in ("1", "true", "ye
 MYSQL_SSL_CA = os.getenv("MYSQL_SSL_CA", "").strip()
 MYSQL_SSL_VERIFY = os.getenv("MYSQL_SSL_VERIFY", "true").strip().lower() not in ("0", "false", "no")
 
+# ---------- Elasticsearch（文档切片与向量） ----------
+
+ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://127.0.0.1:9200").strip()
+ELASTICSEARCH_API_KEY = os.getenv("ELASTICSEARCH_API_KEY", "").strip()
+ELASTICSEARCH_USERNAME = os.getenv("ELASTICSEARCH_USERNAME", "").strip()
+ELASTICSEARCH_PASSWORD = os.getenv("ELASTICSEARCH_PASSWORD", "").strip()
+ELASTICSEARCH_INDEX = os.getenv("ELASTICSEARCH_INDEX", "personal-rag-chunks").strip()
+ELASTICSEARCH_VERIFY_CERTS = os.getenv("ELASTICSEARCH_VERIFY_CERTS", "true").strip().lower() not in ("0", "false", "no")
+
 for _dir in (DATA_DIR, DOCUMENTS_DIR):
     os.makedirs(_dir, exist_ok=True)
 
@@ -73,3 +82,14 @@ JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "168"))  # 7 天
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "400"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "4"))
+
+# ---------- DeepDoc 深度 PDF 解析（版面分析 + OCR + 表格结构） ----------
+# 模型权重（det.ort / rec.ort / layout.ort / tsr.ort / ocr.res）所在目录。
+# 默认放在 backend/rag/parse_model，也可通过环境变量指向其它目录。
+DEEP_DOC_MODEL_DIR = os.getenv(
+    "DEEP_DOC_MODEL_DIR",
+    os.path.join(BACKEND_DIR, "rag", "parse_model"),
+).strip()
+# 是否用 DeepDoc 解析 PDF（需要 onnxruntime/opencv/pyclipper/PyMuPDF 与模型权重）。
+# 关闭或模型缺失时回退到 pypdf 文本层抽取。
+DEEP_DOC_ENABLED = os.getenv("DEEP_DOC_ENABLED", "false").strip().lower() in ("1", "true", "yes")

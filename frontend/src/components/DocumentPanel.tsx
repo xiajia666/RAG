@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, ApiError, uploadDocument } from '../api/client'
+import { api, ApiError } from '../api/client'
 import type { Document } from '../api/types'
+import ChunkingUploadFlow from './ChunkingUploadFlow'
 
 interface Props {
   kbId: string
@@ -11,9 +12,9 @@ interface Props {
 
 export default function DocumentPanel({ kbId, open, isAdmin, onClose }: Props) {
   const [docs, setDocs] = useState<Document[]>([])
-  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [drag, setDrag] = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<File[] | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -31,20 +32,10 @@ export default function DocumentPanel({ kbId, open, isAdmin, onClose }: Props) {
     }
   }, [open, load])
 
-  async function handleFiles(files: FileList | null) {
+  function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setError('')
-    for (const f of Array.from(files)) {
-      setUploading(true)
-      try {
-        await uploadDocument(kbId, f)
-        await load()
-      } catch (err) {
-        setError(`${f.name}：${err instanceof ApiError ? err.message : '上传失败'}`)
-      } finally {
-        setUploading(false)
-      }
-    }
+    setUploadQueue(Array.from(files))
   }
 
   async function remove(id: string) {
@@ -84,9 +75,7 @@ export default function DocumentPanel({ kbId, open, isAdmin, onClose }: Props) {
               handleFiles(e.dataTransfer.files)
             }}
           >
-            {uploading
-              ? '上传中…'
-              : '点击或拖拽文件到此处上传（PDF / Word / txt / md / csv 等）'}
+            点击或拖拽文件到此处上传（PDF / Word / txt / md / csv 等）
           </div>
           <input
             ref={fileRef}
@@ -124,6 +113,7 @@ export default function DocumentPanel({ kbId, open, isAdmin, onClose }: Props) {
           )}
         </div>
       </div>
+      {uploadQueue && <ChunkingUploadFlow kbId={kbId} files={uploadQueue} onClose={() => { setUploadQueue(null); void load() }} onComplete={load} />}
     </>
   )
 }

@@ -9,7 +9,7 @@ from rag import vector_store
 from security import authentication as auth
 from controllers.common import accessible_kb_ids, get_kb_for_user
 from controllers.runtime import AdminUser, CurrentUser, HTTPException, api
-from core.schemas import BulkDocumentDelete
+from core.schemas import BulkDocumentDelete, DocumentParseRequest
 from services import document_service
 
 # 查询当前用户有权访问的全部文档。
@@ -36,11 +36,7 @@ def preview_document(doc_id: str, user=CurrentUser()):
     if not doc:
         raise HTTPException(404, "文档不存在")
     get_kb_for_user(doc["kb_id"], user)
-    chunks = db.query(
-        select(db.Chunk.chunk_index, db.Chunk.content, db.Chunk.created_at)
-        .where(db.Chunk.doc_id == doc_id, db.Chunk.tenant_id == user["tenant_id"])
-        .order_by(db.Chunk.chunk_index).limit(5),
-    )
+    chunks = vector_store.get_document_chunks(user["tenant_id"], doc_id, limit=5)
     return {"document": doc, "chunks": chunks}
 
 
@@ -79,6 +75,7 @@ def bulk_delete_documents(req: BulkDocumentDelete, user=CurrentUser()):
             get_kb_for_user(doc["kb_id"], user, write=True)
             docs.append(doc)
     for doc in docs:
+        vector_store.delete_document(user["tenant_id"], doc["id"])
         db.execute(delete(db.Document).where(db.Document.id == doc["id"], db.Document.tenant_id == user["tenant_id"]))
         document_service.remove_original_file(user["tenant_id"], doc["id"], doc["filename"])
     return {"deleted_count": len(docs)}
@@ -91,6 +88,72 @@ def delete_document(doc_id: str, user=CurrentUser()):
     if not doc:
         raise HTTPException(404, "文档不存在")
     get_kb_for_user(doc["kb_id"], user, write=True)
+    vector_store.delete_document(user["tenant_id"], doc_id)
     db.execute(delete(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
     document_service.remove_original_file(user["tenant_id"], doc_id, doc["filename"])
     return {"deleted": True}
+
+
+# 重新解析指定文档（用于对「仅上传不解析」的文档补解析，或更换解析方式）。
+@api.post('/api/documents/{doc_id}/parse')
+def parse_document(doc_id: str, req: DocumentParseRequest, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user, write=True)
+    try:
+        return document_service.reparse_document(user["tenant_id"], doc_id, req.parse_method)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+# 文档规模指标：计算用于分块策略推荐的文档规模指标（只读）。
+@api.get('/api/documents/{doc_id}/document_size_index_analyse')
+def document_size_index_analyse(doc_id: str, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user)
+    try:
+        return document_service.document_size_index_analyse(user["tenant_id"], doc_id)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+# 结构化程度指标：计算标题、段落、列表、问答等结构特征（只读）。
+@api.get('/api/documents/{doc_id}/structure_index_analyse')
+def structure_index_analyse(doc_id: str, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user)
+    try:
+        return document_service.structure_index_analyse(user["tenant_id"], doc_id)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+# 内容类型分布指标：计算表格、代码、问答、图片、公式等内容占比（只读）。
+@api.get('/api/documents/{doc_id}/content_type_index_analyse')
+def content_type_index_analyse(doc_id: str, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user)
+    try:
+        return document_service.content_type_index_analyse(user["tenant_id"], doc_id)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+# AI 分块策略推荐：基于评估 skill + 文档指标，调用 LLM 生成分块参数推荐。
+@api.post('/api/documents/{doc_id}/chunking_recommend')
+def chunking_recommend(doc_id: str, user=CurrentUser()):
+    doc = db.query_one(select(db.Document).where(db.Document.id == doc_id, db.Document.tenant_id == user["tenant_id"]))
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    get_kb_for_user(doc["kb_id"], user)
+    try:
+        return document_service.chunking_recommend(user["tenant_id"], doc_id)
+    except document_service.DocumentIngestionError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
