@@ -185,24 +185,6 @@ export default function Login() {
             <h2>{mode === 'login' ? '欢迎回来' : '创建你的账号'}</h2>
             <p className="login-form-subtitle">{mode === 'login' ? '登录以继续访问你的知识空间。' : '创建个人或团队空间，开始整理资料并基于文档提问。'}</p>
 
-            {guestEnabled && <button type="button" disabled={busy} onClick={() => void enterAsGuest()} className="login-guest-card">
-              <span className="login-guest-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="1.6" />
-                  <path d="M4.5 20a7.5 7.5 0 0 1 15 0M17 4.5h4m-2-2v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </span>
-              <span className="login-guest-copy">
-                <strong>{busy ? '正在进入游客账号…' : '先体验一下'}</strong>
-                <span>无需注册，立即进入演示空间</span>
-              </span>
-              <span className="login-guest-info" role="note" tabIndex={0} aria-label="游客账号说明" onClick={event => event.stopPropagation()}>
-                ?
-                <span className="login-guest-tooltip">游客共用此账号空间，请勿输入敏感资料</span>
-              </span>
-              <span className="login-guest-arrow" aria-hidden="true">{busy ? <span className="login-spinner" /> : '→'}</span>
-            </button>}
-
             <div className="login-mode-tabs" role="tablist" aria-label="账户操作">
               <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>登录</button>
               <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>注册</button>
@@ -223,9 +205,18 @@ export default function Login() {
               <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="8" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M6.5 8V5.5a3.5 3.5 0 0 1 7 0V8" stroke="currentColor" strokeWidth="1.4" /></svg><input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="输入密码" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} /></div>
 
               {error && <div className="login-error" role="alert"><span>!</span>{error}</div>}
-              <button className="login-submit" disabled={busy || !tenantCode || !username || !password || (mode === 'register' && !tenantName.trim())}>
-                {busy ? <><span className="login-spinner" />请稍候…</> : <>{mode === 'login' ? '进入知识空间' : '创建账号'}<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></>}
-              </button>
+              <div className={`login-action-row${guestEnabled ? ' has-guest' : ''}`}>
+                <button className="login-submit" disabled={busy || !tenantCode || !username || !password || (mode === 'register' && !tenantName.trim())}>
+                  {busy ? <><span className="login-spinner" />请稍候…</> : <>{mode === 'login' ? '进入知识空间' : '创建账号'}<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></>}
+                </button>
+                {guestEnabled && <button type="button" disabled={busy} onClick={() => void enterAsGuest()} className="login-guest-button">
+                  <span className="login-guest-label">{busy ? '请稍候…' : '游客体验'}</span>
+                  <span className="login-guest-info" role="note" tabIndex={0} aria-label="游客账号说明" onClick={event => event.stopPropagation()}>
+                    ?
+                    <span className="login-guest-tooltip">游客共用此账号空间，请勿输入敏感资料</span>
+                  </span>
+                </button>}
+              </div>
             </form>
 
             <div className="login-helper">{mode === 'login' ? <>还没有账号？ <button type="button" onClick={() => switchMode('register')}>创建账号 <span>→</span></button></> : <>已有账号？ <button type="button" onClick={() => switchMode('login')}>返回登录 <span>→</span></button></>}</div>
