@@ -92,11 +92,21 @@ body { margin: 0; }
 .login-submit:hover:not(:disabled) { transform: translateY(-1px); background: linear-gradient(105deg, #68f1dc, #42e0c6); box-shadow: 0 7px 25px rgba(20,202,171,.2); }
 .login-submit:disabled { opacity: .48; cursor: not-allowed; }
 .login-submit svg { width: 17px; height: 17px; }
-.login-guest-button { width: 100%; height: 42px; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid rgba(120,145,165,.22); border-radius: 8px; color: #c4d0da; background: rgba(255,255,255,.025); cursor: pointer; font: 550 11px Outfit, "PingFang SC", sans-serif; transition: .18s ease; }
-.login-guest-button:hover:not(:disabled) { color: #a8fff0; border-color: rgba(60,223,197,.32); background: rgba(47,216,190,.07); }
-.login-guest-button:disabled { opacity: .55; cursor: wait; }
-.login-guest-button .login-spinner { border-color: rgba(190,210,220,.25); border-top-color: #8af5e2; }
-.login-guest-note { margin: 7px 0 0; color: #66778a; text-align: center; font-size: 9px; }
+.login-guest-card { position: relative; width: 100%; min-height: 68px; margin-top: 22px; padding: 11px 14px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(60,223,197,.36); border-radius: 11px; color: #e9fffb; text-align: left; background: linear-gradient(105deg, rgba(31,189,164,.2), rgba(21,121,122,.12) 60%, rgba(52,90,120,.16)); box-shadow: inset 0 1px rgba(255,255,255,.035), 0 8px 24px rgba(0,0,0,.12); cursor: pointer; transition: .18s ease; }
+.login-guest-card:hover:not(:disabled) { transform: translateY(-1px); border-color: rgba(80,244,216,.68); background: linear-gradient(105deg, rgba(31,189,164,.29), rgba(21,121,122,.2) 60%, rgba(52,90,120,.22)); box-shadow: inset 0 1px rgba(255,255,255,.06), 0 9px 27px rgba(23,207,179,.1); }
+.login-guest-card:focus-visible { outline: 2px solid #68f1dc; outline-offset: 3px; }
+.login-guest-card:disabled { opacity: .72; cursor: wait; }
+.login-guest-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: 1px solid rgba(85,241,216,.25); border-radius: 10px; color: #6ff0d9; background: rgba(28,219,186,.12); }
+.login-guest-icon svg { width: 21px; height: 21px; }
+.login-guest-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.login-guest-copy strong { color: #eafffa; font-size: 13px; font-weight: 650; }
+.login-guest-copy > span { color: #9ab9bb; font-size: 10px; }
+.login-guest-info { position: relative; width: 21px; height: 21px; flex: none; display: grid; place-items: center; border: 1px solid rgba(185,213,220,.42); border-radius: 50%; color: #b7cbd0; font: 600 12px/1 Outfit, sans-serif; }
+.login-guest-info:focus-visible { outline: 2px solid #68f1dc; outline-offset: 2px; }
+.login-guest-tooltip { position: absolute; z-index: 5; top: calc(100% + 9px); right: -34px; width: max-content; max-width: min(260px, calc(100vw - 48px)); padding: 9px 11px; border: 1px solid rgba(133,161,174,.28); border-radius: 8px; color: #dce7ec; background: #151f2b; box-shadow: 0 8px 24px rgba(0,0,0,.32); font: 400 10px/1.6 Inter, "PingFang SC", sans-serif; white-space: normal; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-3px); transition: .16s ease; }
+.login-guest-info:hover .login-guest-tooltip, .login-guest-info:focus .login-guest-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
+.login-guest-arrow { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 8px; color: #071511; background: #50e6cc; font-size: 18px; line-height: 1; }
+.login-guest-arrow .login-spinner { width: 13px; height: 13px; border-color: rgba(7,21,17,.25); border-top-color: #071511; }
 .login-spinner { width: 14px; height: 14px; border: 2px solid rgba(7,21,17,.28); border-top-color: #071511; border-radius: 50%; animation: login-spin .7s linear infinite; }
 @keyframes login-spin { to { transform: rotate(360deg); } }
 .login-helper { margin-top: 20px; color: #7f8d9e; text-align: center; font-size: 11px; }
