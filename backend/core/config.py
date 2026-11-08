@@ -70,6 +70,13 @@ def _load_jwt_secret():
 JWT_SECRET = _load_jwt_secret()
 JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "168"))  # 7 天
 
+# ---------- 游客体验账号 ----------
+# 通过服务端环境变量绑定一个已创建的普通只读账号；不在前端暴露密码。
+GUEST_MODE_ENABLED = os.getenv("GUEST_MODE_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+GUEST_TENANT_CODE = os.getenv("GUEST_TENANT_CODE", "").strip().lower()
+GUEST_USERNAME = os.getenv("GUEST_USERNAME", "").strip().casefold()
+GUEST_PASSWORD = os.getenv("GUEST_PASSWORD", "")
+
 # ---------- 分块 / 检索 ----------
 
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "400"))

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getTenantCode, useAuth } from '../store/auth'
-import { ApiError } from '../api/client'
+import { api, ApiError } from '../api/client'
 
 function BrandMark() {
   return (
@@ -36,7 +36,7 @@ function KnowledgeGraphic() {
 }
 
 export default function Login() {
-  const { login, register } = useAuth()
+  const { login, register, guestLogin } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [tenantCode, setTenantCode] = useState(getTenantCode)
   const [tenantName, setTenantName] = useState('')
@@ -44,6 +44,15 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [guestEnabled, setGuestEnabled] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    api.get<{ enabled: boolean }>('/api/auth/guest/status')
+      .then(result => { if (active) setGuestEnabled(result.enabled) })
+      .catch(() => { if (active) setGuestEnabled(false) })
+    return () => { active = false }
+  }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -59,6 +68,24 @@ export default function Login() {
           : err instanceof TypeError
             ? '无法连接服务器，请检查后端是否启动'
             : '操作失败，请稍后重试',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function enterAsGuest() {
+    setError('')
+    setBusy(true)
+    try {
+      await guestLogin()
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof TypeError
+            ? '无法连接服务器，请检查后端是否启动'
+            : '游客登录失败，请稍后重试',
       )
     } finally {
       setBusy(false)
@@ -182,6 +209,13 @@ export default function Login() {
                 {busy ? <><span className="login-spinner" />请稍候…</> : <>{mode === 'login' ? '进入知识空间' : '创建账号'}<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></>}
               </button>
             </form>
+
+            {guestEnabled && <>
+              <button type="button" disabled={busy} onClick={() => void enterAsGuest()} className="login-guest-button">
+                {busy ? <><span className="login-spinner" />正在进入游客账号…</> : <>游客体验<span aria-hidden="true">→</span></>}
+              </button>
+              <p className="login-guest-note">游客共用此账号空间，请勿输入敏感资料</p>
+            </>}
 
             <div className="login-helper">{mode === 'login' ? <>还没有账号？ <button type="button" onClick={() => switchMode('register')}>创建账号 <span>→</span></button></> : <>已有账号？ <button type="button" onClick={() => switchMode('login')}>返回登录 <span>→</span></button></>}</div>
             {mode === 'register' && <div className="login-admin-note"><span>✳</span> 首个注册账号将自动成为管理员</div>}

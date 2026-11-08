@@ -70,6 +70,50 @@ def login(req: LoginRequest, request):
     }
 
 
+# 获取游客模式开关状态，供登录页决定是否展示体验入口。
+@api.get('/api/auth/guest/status')
+def guest_status():
+    enabled = bool(
+        config.GUEST_MODE_ENABLED and config.GUEST_TENANT_CODE
+        and config.GUEST_USERNAME and config.GUEST_PASSWORD
+    )
+    return {"enabled": enabled}
+
+
+# 使用服务端配置的普通只读账号登录游客空间，不向浏览器下发账号密码。
+@api.post('/api/auth/guest')
+def guest_login(request):
+    if not (
+        config.GUEST_MODE_ENABLED and config.GUEST_TENANT_CODE
+        and config.GUEST_USERNAME and config.GUEST_PASSWORD
+    ):
+        raise HTTPException(503, "游客体验暂未开放")
+
+    user = db.query_one(
+        select(db.User)
+        .join(db.Tenant, db.Tenant.id == db.User.tenant_id)
+        .where(
+            db.Tenant.tenant_code == config.GUEST_TENANT_CODE,
+            db.Tenant.status == 1,
+            db.User.username == config.GUEST_USERNAME,
+            db.User.status == 1,
+            db.User.deleted_at.is_(None),
+            db.User.role == "user",
+        ),
+    )
+    if not user or not auth.verify_password(config.GUEST_PASSWORD, user["password_hash"]):
+        raise HTTPException(503, "游客账号未正确配置，请联系管理员")
+
+    last_login_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(update(db.User).where(db.User.id == user["id"], db.User.tenant_id == user["tenant_id"])
+               .values(last_login_at=last_login_at, last_login_ip=request.remote_addr))
+    return {
+        "token": auth.create_token(user["id"], user["tenant_id"], user["token_version"]),
+        "tenant_code": config.GUEST_TENANT_CODE,
+        "user": public_user(user["id"], user["tenant_id"]),
+    }
+
+
 # 获取当前登录用户的资料。
 @api.get('/api/auth/me')
 def me(user=CurrentUser()):
@@ -79,6 +123,17 @@ def me(user=CurrentUser()):
 # 校验当前密码并修改密码，同时刷新登录令牌。
 @api.post('/api/auth/change-password')
 def change_password(req: PasswordChange, user=CurrentUser()):
+    if config.GUEST_MODE_ENABLED and config.GUEST_TENANT_CODE and config.GUEST_USERNAME:
+        guest_user = db.query_one(
+            select(db.User.id)
+            .join(db.Tenant, db.Tenant.id == db.User.tenant_id)
+            .where(
+                db.Tenant.tenant_code == config.GUEST_TENANT_CODE,
+                db.User.username == config.GUEST_USERNAME,
+            ),
+        )
+        if guest_user and guest_user["id"] == user["id"]:
+            raise HTTPException(403, "游客账号不支持修改密码")
     stored = db.query_one(select(db.User.password_hash).where(
         db.User.id == user["id"], db.User.tenant_id == user["tenant_id"],
         db.User.status == 1, db.User.deleted_at.is_(None),
