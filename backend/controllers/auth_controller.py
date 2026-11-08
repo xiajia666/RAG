@@ -98,7 +98,7 @@ def guest_login(request):
             db.User.username == config.GUEST_USERNAME,
             db.User.status == 1,
             db.User.deleted_at.is_(None),
-            db.User.role == "user",
+            db.User.role == "admin",
         ),
     )
     if not user or not auth.verify_password(config.GUEST_PASSWORD, user["password_hash"]):
