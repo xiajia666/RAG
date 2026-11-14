@@ -3,7 +3,7 @@ import { getTenantCode, useAuth } from '../store/auth'
 import { api, ApiError } from '../api/client'
 
 /** 生成圆润、密集的多圈阿基米德螺旋（晕眩眼睛用）。 */
-function dizzySpiral(cx: number, cy: number, r: number, loops = 4): string {
+function dizzySpiral(cx: number, cy: number, r: number, loops = 3): string {
   const points = 640
   const inner = Math.max(0.25, r * 0.06)
   const start = -Math.PI / 2
@@ -128,7 +128,7 @@ function LoginPeople({ mood, isUsernamePeekReturning }: { mood: CompanionMood; i
           <rect className="login-person-closed-eye" x="346" y="187.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
           <path className="login-person-frown" d="M326 224q8 -6 16 0" />
           <circle className="login-person-cheek" cx="300" cy="204" r="4.5" fill="#FF7892" /><circle className="login-person-cheek" cx="368" cy="204" r="4.5" fill="#FF7892" />
-          <path d="M307 220h54" stroke="#28292D" strokeWidth="3.5" strokeLinecap="round" />
+          <path className="login-person-flat-mouth" d="M307 220h54" stroke="#28292D" strokeWidth="3.5" strokeLinecap="round" />
           </g>
         </g>
         <g className="login-person login-person-coral">
@@ -169,6 +169,7 @@ export default function Login() {
   const [loginRejected, setLoginRejected] = useState(false)
   const [isUsernamePeekReturning, setIsUsernamePeekReturning] = useState(false)
   const usernamePeekReturnTimer = useRef<number | null>(null)
+  const loginRejectedTimer = useRef<number | null>(null)
 
   const companionMood: CompanionMood = loginRejected
     ? 'rejected'
@@ -209,6 +210,7 @@ export default function Login() {
 
   useEffect(() => () => {
     if (usernamePeekReturnTimer.current !== null) window.clearTimeout(usernamePeekReturnTimer.current)
+    if (loginRejectedTimer.current !== null) window.clearTimeout(loginRejectedTimer.current)
   }, [])
 
   async function submit(e: React.FormEvent) {
@@ -220,10 +222,12 @@ export default function Login() {
       if (mode === 'login') await login(tenantCode, username, password)
       else await register(tenantName, tenantCode, username, password)
     } catch (err) {
-      if (mode === 'login' && err instanceof ApiError && err.status === 401) {
-        setLoginRejected(true)
-        window.setTimeout(() => setLoginRejected(false), 1700)
-      }
+      setLoginRejected(true)
+      if (loginRejectedTimer.current !== null) window.clearTimeout(loginRejectedTimer.current)
+      loginRejectedTimer.current = window.setTimeout(() => {
+        setLoginRejected(false)
+        loginRejectedTimer.current = null
+      }, 1700)
       setError(
         err instanceof ApiError
           ? err.message

@@ -62,7 +62,7 @@ body { margin: 0; }
 .login-person-eye-socket { transform-box: fill-box; transform-origin: center; translate: var(--socket-x) var(--socket-y); transition: transform .2s ease, translate .14s ease-out; }
 .login-person-violet .login-person-eye-socket { transition: transform .85s cubic-bezier(.22,.78,.22,1), translate .14s ease-out; }
 .login-person-closed-eye { opacity: 0; transition: opacity .16s ease; }
-.login-person-dizzy-eye { transform-box: fill-box; transform-origin: center; opacity: 0; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.login-person-dizzy-eye { transform-box: fill-box; transform-origin: center; opacity: 0; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .login-person-dizzy-mouth { transform-box: fill-box; transform-origin: center; opacity: 0; }
 .login-person-pupil { transform-box: fill-box; transform-origin: center; transform: translate(var(--look-x), var(--look-y)); transition: transform .08s linear, opacity .16s ease; }
 .login-person-arm { opacity: 0; stroke-linecap: round; transform-box: fill-box; transform-origin: center; transition: opacity .2s ease; }
@@ -81,8 +81,8 @@ body { margin: 0; }
 .login-people-stage.is-engaged .login-person-charcoal .login-person-follow { transform: skewX(var(--body-skew)) scale(1.015, 1.025); }
 .login-people-stage.is-engaged .login-person-yellow .login-person-follow { transform: skewX(var(--body-skew)) scale(.99, 1.035); }
 .login-people-stage.is-engaged .login-person-coral .login-person-follow { transform: skewX(var(--body-skew)) scale(1.01, 1.025); }
-.login-people-stage.is-engaged .login-person-yellow > path:last-child { opacity: 0; }
-.login-person-yellow > path:last-child { transition: opacity .2s ease; }
+.login-people-stage.is-engaged .login-person-flat-mouth { opacity: 0; }
+.login-person-flat-mouth { transition: opacity .2s ease; }
 .login-people-stage.is-engaged .login-person-eye-socket,
 .login-people-stage.is-curious .login-person-eye-socket { transform: scale(1.08); }
 .login-people-stage.is-curious .login-person-violet .login-person-follow { transform: skewX(var(--body-skew)) scale(.97, 1.045); }
@@ -160,8 +160,7 @@ body { margin: 0; }
 .login-people-stage.is-rejected .login-person-dizzy-mouth { opacity: 1; animation: login-dizzy-mouth 1s ease-in-out infinite alternate; }
 .login-people-stage.is-rejected .login-person-smile { opacity: 0; }
 .login-people-stage.is-rejected .login-person-frown { opacity: 0; }
-.login-people-stage.is-rejected .login-person-cheek { opacity: .45; }
-.login-people-stage.is-rejected .login-person-yellow > path:last-child { opacity: 0; }
+.login-people-stage.is-rejected .login-person-flat-mouth { opacity: 0; }
 @keyframes login-dizzy-spin {
   from { transform: rotate(0deg) scale(1.08); }
   to { transform: rotate(360deg) scale(1.08); }
