@@ -62,7 +62,7 @@ body { margin: 0; }
 .login-person-eye-socket { transform-box: fill-box; transform-origin: center; translate: var(--socket-x) var(--socket-y); transition: transform .2s ease, translate .14s ease-out; }
 .login-person-violet .login-person-eye-socket { transition: transform .85s cubic-bezier(.22,.78,.22,1), translate .14s ease-out; }
 .login-person-closed-eye { opacity: 0; transition: opacity .16s ease; }
-.login-person-dizzy-eye { transform-box: fill-box; transform-origin: center; opacity: 0; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.login-person-dizzy-eye { transform-box: fill-box; transform-origin: center; opacity: 0; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .login-person-dizzy-mouth { transform-box: fill-box; transform-origin: center; opacity: 0; }
 .login-person-pupil { transform-box: fill-box; transform-origin: center; transform: translate(var(--look-x), var(--look-y)); transition: transform .08s linear, opacity .16s ease; }
 .login-person-arm { opacity: 0; stroke-linecap: round; transform-box: fill-box; transform-origin: center; transition: opacity .2s ease; }
