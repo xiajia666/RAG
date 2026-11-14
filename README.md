@@ -127,11 +127,21 @@ DEEP_DOC_ENABLED=false
 # JWT 密钥（留空则自动生成并持久化到 backend/data/.jwt_secret）
 JWT_SECRET=
 
+# 游客体验（绑定一个已存在的普通只读账号；未配置时登录页不显示游客入口）
+GUEST_MODE_ENABLED=false
+GUEST_TENANT_CODE=
+GUEST_USERNAME=
+GUEST_PASSWORD=
+
 # 服务端口
 PORT=8000
 ```
 
 **Embedding 供应商**：默认推荐 [硅基流动 SiliconFlow](https://siliconflow.cn) 的 `BAAI/bge-m3`（便宜、中文好、注册送额度）。任意 OpenAI 兼容的 embedding 服务均可，改 `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` / `EMBEDDING_API_KEY` 即可，代码零改动。备选：智谱 `embedding-3`、阿里 `text-embedding-v3`。
+
+#### 游客体验账号
+
+游客入口直接登录一个预先创建的普通账号，不会为每位访客新建账号或租户。请在独立演示租户中创建一个 `user`（只读）角色账号，并准备可公开访问的演示知识库；将其租户代码、用户名和密码填入 `GUEST_TENANT_CODE`、`GUEST_USERNAME`、`GUEST_PASSWORD`，再设置 `GUEST_MODE_ENABLED=true` 并重启后端。游客共享该账号，因此会共享其可访问的知识库和会话，请勿在该租户放置私有资料。`GUEST_PASSWORD` 仅保存在服务端环境变量中，不会下发给前端。
 
 ### 3. 启动后端
 

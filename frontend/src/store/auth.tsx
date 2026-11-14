@@ -7,6 +7,7 @@ interface AuthContextValue {
   loading: boolean
   login: (tenantCode: string, username: string, password: string) => Promise<void>
   register: (tenantName: string, tenantCode: string, username: string, password: string) => Promise<void>
+  guestLogin: () => Promise<void>
   logout: () => void
 }
 
@@ -15,7 +16,6 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 const TENANT_KEY = 'rag_tenant_code'
 export function getTenantCode() { return localStorage.getItem(TENANT_KEY) || '' }
 function saveTenantCode(code: string) { localStorage.setItem(TENANT_KEY, code) }
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -62,6 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.user)
   }
 
+  async function guestLogin() {
+    const res = await api.post<{ token: string; tenant_code: string; user: User }>('/api/auth/guest')
+    setToken(res.token)
+    saveTenantCode(res.tenant_code)
+    setUser(res.user)
+  }
+
   function logout() {
     clearToken()
     setUser(null)
@@ -69,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, guestLogin, logout }}>
       {children}
     </AuthContext.Provider>
   )
