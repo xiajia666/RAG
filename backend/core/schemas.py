@@ -59,6 +59,12 @@ class DocumentParseRequest(BaseModel):
     parse_method: str = "plain"
 
 
+class TestsetGenerateRequest(BaseModel):
+    document_ids: list[str]
+    test_size: int = 10
+    distributions: Optional[dict] = None
+
+
 class InviteRequest(BaseModel):
     email: str
     role: Optional[str] = "user"

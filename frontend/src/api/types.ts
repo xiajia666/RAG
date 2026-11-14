@@ -137,3 +137,23 @@ export interface StreamMeta {
   session_id: string
   sources: Source[]
 }
+
+export interface TestsetItem {
+  question: string
+  answer: string
+  question_type: string
+  question_type_label: string
+  contexts: string[]
+}
+
+export interface TestsetTypeRatio {
+  count: number
+  ratio: number
+  label: string
+}
+
+export interface TestsetResult {
+  total: number
+  testset: TestsetItem[]
+  question_type_ratio: Record<string, TestsetTypeRatio>
+}

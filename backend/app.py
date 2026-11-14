@@ -14,6 +14,7 @@ import controllers.documents_controller  # noqa: F401
 import controllers.sessions_controller  # noqa: F401
 import controllers.users_controller  # noqa: F401
 import controllers.chat_controller  # noqa: F401
+import controllers.evaluation_controller  # noqa: F401
 
 
 def create_app(test_config=None):

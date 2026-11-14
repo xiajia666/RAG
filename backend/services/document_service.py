@@ -153,6 +153,15 @@ def _extract_text(doc: dict, data: bytes) -> str:
         raise DocumentIngestionError(f"解析文件失败：{exc}") from exc
 
 
+def get_document_full_text(tenant_id: str, doc_id: str) -> dict:
+    """读取一份文档的记录与整篇文档文本（用于测试集生成等整篇场景）。"""
+    doc, data = _read_document(tenant_id, doc_id)
+    text = _extract_text(doc, data)
+    if not text:
+        raise DocumentIngestionError("未能从文件中提取到文本", 400)
+    return {"document": doc, "text": text}
+
+
 # 四类分析结果的分类键与对应计算函数。
 _ANALYSIS_COMPUTE = {
     "document_size_index": analysis.compute_document_size_index,
