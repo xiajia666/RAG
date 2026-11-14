@@ -16,7 +16,7 @@ function BrandMark() {
 
 type CompanionMood = 'neutral' | 'curious' | 'username' | 'covering' | 'peeking' | 'rejected'
 
-function LoginPeople({ mood }: { mood: CompanionMood }) {
+function LoginPeople({ mood, isUsernamePeekReturning }: { mood: CompanionMood; isUsernamePeekReturning: boolean }) {
   const stageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -61,7 +61,7 @@ function LoginPeople({ mood }: { mood: CompanionMood }) {
   }, [])
 
   return (
-    <div ref={stageRef} className={`login-people-stage is-${mood}`} aria-hidden="true">
+    <div ref={stageRef} className={`login-people-stage is-${mood}${isUsernamePeekReturning ? ' is-username-returning' : ''}`} aria-hidden="true">
       <svg className="login-people" viewBox="0 0 420 340" fill="none">
         <g transform="matrix(.92 0 0 1.15 7.6 13)">
         <g className="login-person login-person-violet">
@@ -71,6 +71,11 @@ function LoginPeople({ mood }: { mood: CompanionMood }) {
           <path d="M105 278V44a10 10 0 0 1 10-10h82a10 10 0 0 1 10 10v234h-102Z" fill="#7042F5" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="140" cy="91" r="6.7" fill="white" /><circle className="login-person-pupil" cx="140" cy="91" r="2.3" fill="#22242B" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="174" cy="91" r="6.7" fill="white" /><circle className="login-person-pupil" cx="174" cy="91" r="2.3" fill="#22242B" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M140 87.5C144.5 86.8 146 92 142.2 94.2C138.5 96.2 135.6 92 137.8 89.2C139.4 87.1 142.7 88.1 141.8 90.5" stroke="#F5F1FF" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M174 87.5C178.5 86.8 180 92 176.2 94.2C172.5 96.2 169.6 92 171.8 89.2C173.4 87.1 176.7 88.1 175.8 90.5" stroke="#F5F1FF" /></g>
+          <ellipse className="login-person-dizzy-mouth" cx="157" cy="115" rx="3.2" ry="4.2" fill="#30205F" />
+          <rect className="login-person-closed-eye" x="133" y="89.2" width="14" height="3.6" rx="1.8" fill="#35216F" />
+          <rect className="login-person-closed-eye" x="167" y="90.2" width="14" height="3.6" rx="1.8" fill="#35216F" />
           <path className="login-person-smile" d="M148 110q9 8 18 0" />
           <path className="login-person-frown" d="M148 116q9 -8 18 0" />
           <circle className="login-person-cheek" cx="126" cy="111" r="5" fill="#FF7892" /><circle className="login-person-cheek" cx="188" cy="111" r="5" fill="#FF7892" />
@@ -83,6 +88,11 @@ function LoginPeople({ mood }: { mood: CompanionMood }) {
           <path d="M205 278V99a9 9 0 0 1 9-9h65a9 9 0 0 1 9 9v179h-83Z" fill="#28292D" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="230" cy="142" r="6.2" fill="white" /><circle className="login-person-pupil" cx="230" cy="142" r="2.1" fill="#22242B" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="256" cy="142" r="6.2" fill="white" /><circle className="login-person-pupil" cx="256" cy="142" r="2.1" fill="#22242B" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M230 138.7C234 138 235.5 143 231.8 145C228.4 146.5 226.4 142.5 228.4 139.7C230 137.6 232.7 139 231.7 141.2" stroke="#F1F3F2" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M256 138.7C260 138 261.5 143 257.8 145C254.4 146.5 252.4 142.5 254.4 139.7C256 137.6 258.7 139 257.7 141.2" stroke="#F1F3F2" /></g>
+          <ellipse className="login-person-dizzy-mouth" cx="246" cy="165" rx="2.7" ry="3.8" fill="#F1F3F2" />
+          <rect className="login-person-closed-eye" x="224" y="140.2" width="12" height="3.6" rx="1.8" fill="#C5C8CA" />
+          <rect className="login-person-closed-eye" x="250" y="141.2" width="12" height="3.6" rx="1.8" fill="#C5C8CA" />
           <path className="login-person-smile" d="M236 160q7 6 14 0" />
           <path className="login-person-frown" d="M236 166q7 -6 14 0" />
           <circle className="login-person-cheek" cx="218" cy="161" r="4.5" fill="#FF7892" /><circle className="login-person-cheek" cx="268" cy="161" r="4.5" fill="#FF7892" />
@@ -95,6 +105,11 @@ function LoginPeople({ mood }: { mood: CompanionMood }) {
           <path d="M278 278V196a57 57 0 0 1 114 0v82H278Z" fill="#F1D94F" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="316" cy="188" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="316" cy="188" r="1.6" fill="#fff" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="352" cy="188" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="352" cy="188" r="1.6" fill="#fff" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M316 184.8C319.5 184.2 320.7 188.7 317.5 190.4C314.6 191.7 312.5 188.3 314.5 186C315.8 184.7 318 185.2 317.4 187.2" stroke="#28292D" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M352 184.8C355.5 184.2 356.7 188.7 353.5 190.4C350.6 191.7 348.5 188.3 350.5 186C351.8 184.7 354 185.2 353.4 187.2" stroke="#28292D" /></g>
+          <ellipse className="login-person-dizzy-mouth" cx="334" cy="220" rx="2.5" ry="3.4" fill="#28292D" />
+          <rect className="login-person-closed-eye" x="310" y="186.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
+          <rect className="login-person-closed-eye" x="346" y="187.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
           <path className="login-person-frown" d="M326 224q8 -6 16 0" />
           <circle className="login-person-cheek" cx="300" cy="204" r="4.5" fill="#FF7892" /><circle className="login-person-cheek" cx="368" cy="204" r="4.5" fill="#FF7892" />
           <path d="M307 220h54" stroke="#28292D" strokeWidth="3.5" strokeLinecap="round" />
@@ -107,6 +122,11 @@ function LoginPeople({ mood }: { mood: CompanionMood }) {
           <path d="M48 278v-43a75 75 0 0 1 150 0v43H48Z" fill="#FF9B70" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="104" cy="228" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="104" cy="228" r="1.6" fill="#fff" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="140" cy="228" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="140" cy="228" r="1.6" fill="#fff" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M104 224.8C107.5 224.2 108.7 228.7 105.5 230.4C102.6 231.7 100.5 228.3 102.5 226C103.8 224.7 106 225.2 105.4 227.2" stroke="#28292D" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M140 224.8C143.5 224.2 144.7 228.7 141.5 230.4C138.6 231.7 136.5 228.3 138.5 226C139.8 224.7 142 225.2 141.4 227.2" stroke="#28292D" /></g>
+          <ellipse className="login-person-dizzy-mouth" cx="122" cy="253" rx="2.5" ry="3.4" fill="#28292D" />
+          <rect className="login-person-closed-eye" x="98" y="226.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
+          <rect className="login-person-closed-eye" x="134" y="227.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
           <path className="login-person-smile" d="M114 249q8 6 16 0" />
           <path className="login-person-frown" d="M114 255q8 -6 16 0" />
           <circle className="login-person-cheek" cx="87" cy="246" r="4.5" fill="#FF7892" /><circle className="login-person-cheek" cx="157" cy="246" r="4.5" fill="#FF7892" />
@@ -131,6 +151,8 @@ export default function Login() {
   const [focusedField, setFocusedField] = useState<'tenant' | 'username' | 'password' | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [loginRejected, setLoginRejected] = useState(false)
+  const [isUsernamePeekReturning, setIsUsernamePeekReturning] = useState(false)
+  const usernamePeekReturnTimer = useRef<number | null>(null)
 
   const companionMood: CompanionMood = loginRejected
     ? 'rejected'
@@ -142,12 +164,35 @@ export default function Login() {
       ? 'curious'
       : 'neutral'
 
+  function focusUsername() {
+    if (usernamePeekReturnTimer.current !== null) {
+      window.clearTimeout(usernamePeekReturnTimer.current)
+      usernamePeekReturnTimer.current = null
+    }
+    setIsUsernamePeekReturning(false)
+    setFocusedField('username')
+  }
+
+  function blurUsername() {
+    setFocusedField(null)
+    setIsUsernamePeekReturning(true)
+    if (usernamePeekReturnTimer.current !== null) window.clearTimeout(usernamePeekReturnTimer.current)
+    usernamePeekReturnTimer.current = window.setTimeout(() => {
+      setIsUsernamePeekReturning(false)
+      usernamePeekReturnTimer.current = null
+    }, 1080)
+  }
+
   useEffect(() => {
     let active = true
     api.get<{ enabled: boolean }>('/api/auth/guest/status')
       .then(result => { if (active) setGuestEnabled(result.enabled) })
       .catch(() => { if (active) setGuestEnabled(false) })
     return () => { active = false }
+  }, [])
+
+  useEffect(() => () => {
+    if (usernamePeekReturnTimer.current !== null) window.clearTimeout(usernamePeekReturnTimer.current)
   }, [])
 
   async function submit(e: React.FormEvent) {
@@ -218,7 +263,7 @@ export default function Login() {
           </div>
 
           <div className="login-visual">
-            <LoginPeople mood={companionMood} />
+            <LoginPeople mood={companionMood} isUsernamePeekReturning={isUsernamePeekReturning} />
             <span className="login-people-caption">把知识，变成随时可用的答案</span>
           </div>
 
@@ -277,7 +322,7 @@ export default function Login() {
         <section className="login-form-side">
           <div className="login-form-content">
             <div className="login-mobile-brand"><BrandMark /><span>知微·知识库</span></div>
-            <div className="login-mobile-people"><LoginPeople mood={companionMood} /></div>
+            <div className="login-mobile-people"><LoginPeople mood={companionMood} isUsernamePeekReturning={isUsernamePeekReturning} /></div>
             <div className="login-heading-kicker">WELCOME BACK</div>
             <h2>{mode === 'login' ? '欢迎回来' : '创建你的账号'}</h2>
             <p className="login-form-subtitle">{mode === 'login' ? '登录以继续访问你的知识空间。' : '创建个人或团队空间，开始整理资料并基于文档提问。'}</p>
@@ -296,7 +341,7 @@ export default function Login() {
               <div className="login-input-wrap"><input id="tenant-code" value={tenantCode} onChange={(e) => setTenantCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} onFocus={() => setFocusedField('tenant')} onBlur={() => setFocusedField(null)} placeholder="例如：my-knowledge" autoComplete="organization" maxLength={64} /></div>
 
               <label htmlFor="login-username">用户名 {mode === 'register' && <span className="login-field-hint">3–32 个字符</span>}</label>
-              <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.5" r="3" stroke="currentColor" strokeWidth="1.4" /><path d="M4 16c.5-2.5 2.5-4 6-4s5.5 1.5 6 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg><input id="login-username" value={username} onChange={(e) => setUsername(e.target.value)} onFocus={() => setFocusedField('username')} onBlur={() => setFocusedField(null)} placeholder="输入用户名" autoComplete="username" autoFocus maxLength={mode === 'register' ? 32 : undefined} /></div>
+              <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.5" r="3" stroke="currentColor" strokeWidth="1.4" /><path d="M4 16c.5-2.5 2.5-4 6-4s5.5 1.5 6 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg><input id="login-username" value={username} onChange={(e) => setUsername(e.target.value)} onFocus={focusUsername} onBlur={blurUsername} placeholder="输入用户名" autoComplete="username" maxLength={mode === 'register' ? 32 : undefined} /></div>
 
               <div className="login-password-label"><label htmlFor="login-password">密码</label>{mode === 'register' && <span>至少 8 位</span>}</div>
               <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="8" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M6.5 8V5.5a3.5 3.5 0 0 1 7 0V8" stroke="currentColor" strokeWidth="1.4" /></svg><input id="login-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => { setPassword(e.target.value); setLoginRejected(false) }} onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)} placeholder="输入密码" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} /><button type="button" className="login-password-toggle" onMouseDown={event => event.preventDefault()} onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)} onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? '隐藏密码' : '显示密码'} title={showPassword ? '隐藏密码' : '显示密码'}><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.2 10s2.7-5 7.8-5 7.8 5 7.8 5-2.7 5-7.8 5-7.8-5-7.8-5Z" stroke="currentColor" strokeWidth="1.4" /><circle cx="10" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.4" />{showPassword && <path d="m3 3 14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}</svg></button></div>
@@ -304,7 +349,7 @@ export default function Login() {
               {error && <div className="login-error" role="alert"><span>!</span>{error}</div>}
               <div className={`login-action-row${guestEnabled ? ' has-guest' : ''}`}>
                 <button className="login-submit" disabled={busy || !tenantCode || !username || !password || (mode === 'register' && !tenantName.trim())}>
-                  {busy ? <><span className="login-spinner" />请稍候…</> : <>{mode === 'login' ? '进入知识空间' : '创建账号'}<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></>}
+                  {busy ? <><span className="login-spinner" />请稍候…</> : mode === 'login' ? '进入知识空间' : '创建账号'}
                 </button>
                 {guestEnabled && <button type="button" disabled={busy} onClick={() => void enterAsGuest()} className="login-guest-button">
                   <span className="login-guest-label">{busy ? '请稍候…' : '游客体验'}</span>
