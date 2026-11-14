@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getTenantCode, useAuth } from '../store/auth'
 import { api, ApiError } from '../api/client'
 
@@ -35,6 +35,73 @@ function KnowledgeGraphic() {
   )
 }
 
+type CompanionMood = 'neutral' | 'curious' | 'covering' | 'peeking'
+
+function LoginCompanions({ mood }: { mood: CompanionMood }) {
+  const stageRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const panel = stageRef.current?.closest('.login-form-side')
+    if (!panel) return
+
+    function followPointer(event: PointerEvent) {
+      const stage = stageRef.current
+      if (event.pointerType === 'touch' || !stage) return
+      const bounds = panel.getBoundingClientRect()
+      const x = (event.clientX - bounds.left) / bounds.width - 0.5
+      const y = (event.clientY - bounds.top) / bounds.height - 0.5
+      stage.style.setProperty('--look-x', `${(x * 7).toFixed(1)}px`)
+      stage.style.setProperty('--look-y', `${(y * 5).toFixed(1)}px`)
+    }
+
+    function resetGaze() {
+      stageRef.current?.style.setProperty('--look-x', '0px')
+      stageRef.current?.style.setProperty('--look-y', '0px')
+    }
+
+    panel.addEventListener('pointermove', followPointer, { passive: true })
+    panel.addEventListener('pointerleave', resetGaze)
+    return () => {
+      panel.removeEventListener('pointermove', followPointer)
+      panel.removeEventListener('pointerleave', resetGaze)
+    }
+  }, [])
+
+  return (
+    <div
+      ref={stageRef}
+      className={`login-companions is-${mood}`}
+      aria-hidden="true"
+    >
+      <div className="login-mascot login-mascot-mint">
+        <span className="login-mascot-antenna" />
+        <span className="login-mascot-body">
+          <span className="login-mascot-eye"><i /></span>
+          <span className="login-mascot-eye"><i /></span>
+          <span className="login-mascot-mouth" />
+          <span className="login-mascot-hand login-mascot-hand-left" />
+          <span className="login-mascot-hand login-mascot-hand-right" />
+        </span>
+        <span className="login-mascot-foot login-mascot-foot-left" />
+        <span className="login-mascot-foot login-mascot-foot-right" />
+      </div>
+      <div className="login-mascot login-mascot-lilac">
+        <span className="login-mascot-antenna" />
+        <span className="login-mascot-body">
+          <span className="login-mascot-eye"><i /></span>
+          <span className="login-mascot-eye"><i /></span>
+          <span className="login-mascot-mouth" />
+          <span className="login-mascot-hand login-mascot-hand-left" />
+          <span className="login-mascot-hand login-mascot-hand-right" />
+        </span>
+        <span className="login-mascot-foot login-mascot-foot-left" />
+        <span className="login-mascot-foot login-mascot-foot-right" />
+      </div>
+      <span className="login-companion-caption">知识小助手已就位</span>
+    </div>
+  )
+}
+
 export default function Login() {
   const { login, register, guestLogin } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -45,6 +112,14 @@ export default function Login() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [guestEnabled, setGuestEnabled] = useState(false)
+  const [focusedField, setFocusedField] = useState<'tenant' | 'username' | 'password' | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+
+  const companionMood: CompanionMood = focusedField === 'password'
+    ? (showPassword ? 'peeking' : 'covering')
+    : focusedField
+      ? 'curious'
+      : 'neutral'
 
   useEffect(() => {
     let active = true
@@ -179,6 +254,8 @@ export default function Login() {
         <section className="login-form-side">
           <div className="login-form-top"><span>安全访问</span><span className="login-lock"><svg viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" /></svg> SECURE</span></div>
 
+          <LoginCompanions mood={companionMood} />
+
           <div className="login-form-content">
             <div className="login-mobile-brand"><BrandMark /><span>知微·知识库</span></div>
             <div className="login-heading-kicker">WELCOME BACK</div>
@@ -196,13 +273,13 @@ export default function Login() {
                 <div className="login-input-wrap"><input id="tenant-name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} placeholder="例如：我的知识空间 / 知微团队" maxLength={128} /></div>
               </>}
               <label htmlFor="tenant-code">空间代码 <span className="login-field-hint">个人或团队成员登录时使用</span></label>
-              <div className="login-input-wrap"><input id="tenant-code" value={tenantCode} onChange={(e) => setTenantCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="例如：my-knowledge" autoComplete="organization" maxLength={64} /></div>
+              <div className="login-input-wrap"><input id="tenant-code" value={tenantCode} onChange={(e) => setTenantCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} onFocus={() => setFocusedField('tenant')} onBlur={() => setFocusedField(null)} placeholder="例如：my-knowledge" autoComplete="organization" maxLength={64} /></div>
 
               <label htmlFor="login-username">用户名 {mode === 'register' && <span className="login-field-hint">3–32 个字符</span>}</label>
-              <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.5" r="3" stroke="currentColor" strokeWidth="1.4" /><path d="M4 16c.5-2.5 2.5-4 6-4s5.5 1.5 6 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg><input id="login-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="输入用户名" autoComplete="username" autoFocus maxLength={mode === 'register' ? 32 : undefined} /></div>
+              <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.5" r="3" stroke="currentColor" strokeWidth="1.4" /><path d="M4 16c.5-2.5 2.5-4 6-4s5.5 1.5 6 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg><input id="login-username" value={username} onChange={(e) => setUsername(e.target.value)} onFocus={() => setFocusedField('username')} onBlur={() => setFocusedField(null)} placeholder="输入用户名" autoComplete="username" autoFocus maxLength={mode === 'register' ? 32 : undefined} /></div>
 
               <div className="login-password-label"><label htmlFor="login-password">密码</label>{mode === 'register' && <span>至少 8 位</span>}</div>
-              <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="8" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M6.5 8V5.5a3.5 3.5 0 0 1 7 0V8" stroke="currentColor" strokeWidth="1.4" /></svg><input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="输入密码" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} /></div>
+              <div className="login-input-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="4" y="8" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M6.5 8V5.5a3.5 3.5 0 0 1 7 0V8" stroke="currentColor" strokeWidth="1.4" /></svg><input id="login-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)} placeholder="输入密码" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} /><button type="button" className="login-password-toggle" onMouseDown={event => event.preventDefault()} onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)} onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? '隐藏密码' : '显示密码'} title={showPassword ? '隐藏密码' : '显示密码'}><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.2 10s2.7-5 7.8-5 7.8 5 7.8 5-2.7 5-7.8 5-7.8-5-7.8-5Z" stroke="currentColor" strokeWidth="1.4" /><circle cx="10" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.4" />{showPassword && <path d="m3 3 14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}</svg></button></div>
 
               {error && <div className="login-error" role="alert"><span>!</span>{error}</div>}
               <div className={`login-action-row${guestEnabled ? ' has-guest' : ''}`}>
