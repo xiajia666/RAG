@@ -41,15 +41,16 @@ function LoginCompanions({ mood }: { mood: CompanionMood }) {
   const stageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const panel = stageRef.current?.closest('.login-form-side')
+    const panel = stageRef.current?.closest('.login-form-side') as HTMLElement
     if (!panel) return
 
-    function followPointer(event: PointerEvent) {
+    function followPointer(event: Event) {
+      const pointerEvent = event as PointerEvent
       const stage = stageRef.current
-      if (event.pointerType === 'touch' || !stage) return
+      if (pointerEvent.pointerType === 'touch' || !stage) return
       const bounds = panel.getBoundingClientRect()
-      const x = (event.clientX - bounds.left) / bounds.width - 0.5
-      const y = (event.clientY - bounds.top) / bounds.height - 0.5
+      const x = (pointerEvent.clientX - bounds.left) / bounds.width - 0.5
+      const y = (pointerEvent.clientY - bounds.top) / bounds.height - 0.5
       stage.style.setProperty('--look-x', `${(x * 7).toFixed(1)}px`)
       stage.style.setProperty('--look-y', `${(y * 5).toFixed(1)}px`)
     }
