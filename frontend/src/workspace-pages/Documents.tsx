@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { api, downloadDocument, reparseDocument, type ParseMethod } from '../api/client'
 import type { Document, KnowledgeBase } from '../api/types'
 import { useAuth } from '../store/auth'
@@ -121,7 +122,7 @@ export default function Documents() {
     </div>}
     {analyzeTarget && <DocumentAnalysisPanel docId={analyzeTarget.id} filename={analyzeTarget.filename} onClose={() => setAnalyzeTarget(null)} />}
     {uploadQueue && <ChunkingUploadFlow key={uploadQueue.kbId} kbId={uploadQueue.kbId} files={uploadQueue.files} onClose={() => { setUploadQueue(null); void refresh().catch(e => setError(e.message)) }} onComplete={refresh} />}
-    {moreMenu && (<><button className="fixed inset-0 z-20 cursor-default" style={{ background: 'transparent' }} onClick={() => setMoreMenu(null)} aria-label="关闭菜单" /><div className="fixed z-30 w-44 rounded-lg py-1" style={{ left: Math.max(8, Math.min(moreMenu.left, window.innerWidth - 184)), top: moreMenu.top, background: 'var(--color-surface-3)', border: '1px solid var(--color-border-md)', boxShadow: '0 10px 28px rgba(0,0,0,.5)' }}><button className="block w-full px-3 py-2 text-left text-sm" style={{ color: 'var(--color-cyan)' }} onClick={() => { setTestsetTargets([{ id: moreMenu.doc.id, filename: moreMenu.doc.filename }]); setMoreMenu(null) }}>生成问答数据集</button></div></>)}
+    {moreMenu && createPortal(<><button className="fixed inset-0 z-20 cursor-default" style={{ background: 'transparent' }} onClick={() => setMoreMenu(null)} aria-label="关闭菜单" /><div className="fixed z-30 w-44 rounded-lg py-1" style={{ left: Math.max(8, Math.min(moreMenu.left, window.innerWidth - 184)), top: moreMenu.top, background: 'var(--color-surface-3)', border: '1px solid var(--color-border-md)', boxShadow: '0 10px 28px rgba(0,0,0,.5)' }}><button className="block w-full px-3 py-2 text-left text-sm" style={{ color: 'var(--color-cyan)' }} onClick={() => { setTestsetTargets([{ id: moreMenu.doc.id, filename: moreMenu.doc.filename }]); setMoreMenu(null) }}>生成问答数据集</button></div></>, document.body)}
     {testsetTargets && <GenerateTestsetPanel documents={testsetTargets} onClose={() => setTestsetTargets(null)} />}
   </div>
 }
