@@ -2,6 +2,22 @@ import { useEffect, useRef, useState } from 'react'
 import { getTenantCode, useAuth } from '../store/auth'
 import { api, ApiError } from '../api/client'
 
+/** 生成圆润、密集的多圈阿基米德螺旋（晕眩眼睛用）。 */
+function dizzySpiral(cx: number, cy: number, r: number, loops = 4): string {
+  const points = 640
+  const inner = Math.max(0.25, r * 0.06)
+  const start = -Math.PI / 2
+  const end = start + loops * Math.PI * 2
+  let d = ''
+  for (let i = 0; i <= points; i++) {
+    const t = i / points
+    const th = start + (end - start) * t
+    const rr = inner + (r - inner) * t
+    d += `${i ? 'L' : 'M'}${(cx + rr * Math.cos(th)).toFixed(2)} ${(cy + rr * Math.sin(th)).toFixed(2)}`
+  }
+  return d
+}
+
 function BrandMark() {
   return (
     <span className="login-brand-mark" aria-hidden="true">
@@ -71,8 +87,8 @@ function LoginPeople({ mood, isUsernamePeekReturning }: { mood: CompanionMood; i
           <path d="M105 278V44a10 10 0 0 1 10-10h82a10 10 0 0 1 10 10v234h-102Z" fill="#7042F5" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="140" cy="91" r="6.7" fill="white" /><circle className="login-person-pupil" cx="140" cy="91" r="2.3" fill="#22242B" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="174" cy="91" r="6.7" fill="white" /><circle className="login-person-pupil" cx="174" cy="91" r="2.3" fill="#22242B" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M140 91C143 89 145 92 143 94C141 96 137 94 138 91C139 87 145 86 148 90C151 95 148 100 144 101" stroke="#F5F1FF" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M174 91C177 89 179 92 177 94C175 96 171 94 172 91C173 87 179 86 182 90C185 95 182 100 178 101" stroke="#F5F1FF" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d={dizzySpiral(140, 91, 7.4)} stroke="#F5F1FF" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d={dizzySpiral(174, 91, 7.4)} stroke="#F5F1FF" /></g>
           <ellipse className="login-person-dizzy-mouth" cx="157" cy="115" rx="3.2" ry="4.2" fill="#30205F" />
           <rect className="login-person-closed-eye" x="133" y="89.2" width="14" height="3.6" rx="1.8" fill="#35216F" />
           <rect className="login-person-closed-eye" x="167" y="90.2" width="14" height="3.6" rx="1.8" fill="#35216F" />
@@ -88,8 +104,8 @@ function LoginPeople({ mood, isUsernamePeekReturning }: { mood: CompanionMood; i
           <path d="M205 278V99a9 9 0 0 1 9-9h65a9 9 0 0 1 9 9v179h-83Z" fill="#28292D" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="230" cy="142" r="6.2" fill="white" /><circle className="login-person-pupil" cx="230" cy="142" r="2.1" fill="#22242B" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="256" cy="142" r="6.2" fill="white" /><circle className="login-person-pupil" cx="256" cy="142" r="2.1" fill="#22242B" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M230 142C233 140 235 143 233 145C231 147 227 145 228 142C229 138 235 137 238 141C241 146 238 151 234 152" stroke="#F1F3F2" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M256 142C259 140 261 143 259 145C257 147 253 145 254 142C255 138 261 137 264 141C267 146 264 151 260 152" stroke="#F1F3F2" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d={dizzySpiral(230, 142, 6.8)} stroke="#F1F3F2" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d={dizzySpiral(256, 142, 6.8)} stroke="#F1F3F2" /></g>
           <ellipse className="login-person-dizzy-mouth" cx="246" cy="165" rx="2.7" ry="3.8" fill="#F1F3F2" />
           <rect className="login-person-closed-eye" x="224" y="140.2" width="12" height="3.6" rx="1.8" fill="#C5C8CA" />
           <rect className="login-person-closed-eye" x="250" y="141.2" width="12" height="3.6" rx="1.8" fill="#C5C8CA" />
@@ -105,8 +121,8 @@ function LoginPeople({ mood, isUsernamePeekReturning }: { mood: CompanionMood; i
           <path d="M278 278V196a57 57 0 0 1 114 0v82H278Z" fill="#F1D94F" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="316" cy="188" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="316" cy="188" r="1.6" fill="#fff" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="352" cy="188" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="352" cy="188" r="1.6" fill="#fff" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M316 188C319 186 321 189 319 191C317 193 313 191 314 188C315 184 321 183 324 187C327 192 324 197 320 198" stroke="#28292D" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M352 188C355 186 357 189 355 191C353 193 349 191 350 188C351 184 357 183 360 187C363 192 360 197 356 198" stroke="#28292D" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d={dizzySpiral(316, 188, 6.2)} stroke="#28292D" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d={dizzySpiral(352, 188, 6.2)} stroke="#28292D" /></g>
           <ellipse className="login-person-dizzy-mouth" cx="334" cy="220" rx="2.5" ry="3.4" fill="#28292D" />
           <rect className="login-person-closed-eye" x="310" y="186.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
           <rect className="login-person-closed-eye" x="346" y="187.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
@@ -122,8 +138,8 @@ function LoginPeople({ mood, isUsernamePeekReturning }: { mood: CompanionMood; i
           <path d="M48 278v-43a75 75 0 0 1 150 0v43H48Z" fill="#FF9B70" />
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="104" cy="228" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="104" cy="228" r="1.6" fill="#fff" /></g>
           <g className="login-person-eye-socket"><circle className="login-person-eye" cx="140" cy="228" r="5.7" fill="#28292D" /><circle className="login-person-pupil" cx="140" cy="228" r="1.6" fill="#fff" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d="M104 228C107 226 109 229 107 231C105 233 101 231 102 228C103 224 109 223 112 227C115 232 112 237 108 238" stroke="#28292D" /></g>
-          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d="M140 228C143 226 145 229 143 231C141 233 137 231 138 228C139 224 145 223 148 227C151 232 148 237 144 238" stroke="#28292D" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-left"><path d={dizzySpiral(104, 228, 6.2)} stroke="#28292D" /></g>
+          <g className="login-person-dizzy-eye login-person-dizzy-eye-right"><path d={dizzySpiral(140, 228, 6.2)} stroke="#28292D" /></g>
           <ellipse className="login-person-dizzy-mouth" cx="122" cy="253" rx="2.5" ry="3.4" fill="#28292D" />
           <rect className="login-person-closed-eye" x="98" y="226.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
           <rect className="login-person-closed-eye" x="134" y="227.2" width="12" height="3.6" rx="1.8" fill="#28292D" />
