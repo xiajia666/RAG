@@ -35,12 +35,18 @@ export default function KnowledgeBases({ initialKbId, showNew, onNavigate }: Pro
   async function load() {
     const list = await api.get<KnowledgeBase[]>('/api/kbs')
     setItems(list)
-    if (initialKbId) {
-      const found = list.find(item => item.id === initialKbId)
-      if (found) setSelected(found)
-    }
   }
   useEffect(() => { load().catch(e => setError(e.message)); api.get<ModelInfo>('/api/models').then(setModelInfo).catch(() => {}) }, [])
+  useEffect(() => {
+    if (!initialKbId) {
+      setSelected(null)
+      return
+    }
+    setSelected(items.find(item => item.id === initialKbId) || null)
+  }, [initialKbId, items])
+  useEffect(() => {
+    setWizard(!!showNew && user?.role === 'admin')
+  }, [showNew, user?.role])
   useEffect(() => {
     if (!selected) return
     setDraftName(selected.name); setDraftDescription(selected.description || '')
