@@ -1,133 +1,46 @@
-"""基于 ragas 从整篇文档生成测试集（问题 / 答案 / 问题类型 / 类型比例）。
+"""基于 Ragas 内置 Query Synthesizer 生成问答测试集。
 
-用法：
-    from rag.rag_evaluation import generate_testset
-    result = generate_testset(
-        documents=[{"filename": "a.pdf", "text": "……整篇文档文本……"}],
-        test_size=10,
-    )
+当前支持三种 Ragas 内置问题类型和一种自定义问题类型：
 
-``result`` 结构：
-    {
-        "total": 10,
-        "testset": [
-            {"question": "...", "answer": "...", "question_type": "simple",
-             "question_type_label": "单跳问题", "contexts": ["..."]},
-            ...
-        ],
-        "question_type_ratio": {
-            "simple": {"count": 5, "ratio": 0.5, "label": "单跳问题"},
-            ...
-        },
-    }
+* ``single_hop_specific``：单跳具体
+* ``multi_hop_specific``：多跳具体
+* ``multi_hop_abstract``：多跳抽象
+* ``unanswerable``：不可回答（自定义 Query Synthesizer）
+
+``distributions`` 中的值可以传数量或权重，生成前会统一归一化。
+接口可以提前传入全部十种业务问题类型；尚未实现的六种类型会暂时忽略。
 """
 from __future__ import annotations
 
 import typing as t
 
-import numpy as np
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 from ragas.run_config import RunConfig
 from ragas.testset import TestsetGenerator
-from ragas.testset.docstore import Document, InMemoryDocumentStore
-from ragas.testset.evolutions import (
-    conditional,
-    multi_context,
-    reasoning,
-    simple,
-)
-from ragas.testset.extractor import KeyphraseExtractor
 
+from rag.rag_evaluation.evaluation_type import (
+    QUESTION_TYPE_LABELS,
+    build_query_distribution,
+)
 from rag.rag_evaluation.wrappers import CloudRagasEmbeddings, DeepSeekRagasLLM
 
-# ragas 的 evolution_type 与业务中文名映射。
-QUESTION_TYPE_LABELS = {
-    "simple": "单跳问题",
-    "reasoning": "多跳推理",
-    "multi_context": "多上下文",
-    "conditional": "条件问题",
-    "single_hop_specific": "单跳具体",
-    "single_hop_abstract": "单跳抽象",
-    "multi_hop_specific": "多跳具体",
-    "multi_hop_abstract": "多跳抽象",
-    "factual": "事实类",
-    "conditional_constraint": "条件约束型",
-    "comparative": "对比类",
-    "conditional_reasoning": "条件推理问题",
-    "cross_document": "跨文档关联类",
-    "unanswerable": "不可回答型",
-}
 
-# 新的业务问题类型会映射到最接近的 ragas evolution。
-# 保留旧 key，以兼容已上线的调用方。
-_EVOLUTION_BY_TYPE = {
-    "simple": simple,
-    "reasoning": reasoning,
-    "multi_context": multi_context,
-    "conditional": conditional,
-    "single_hop_specific": simple,
-    "single_hop_abstract": simple,
-    "multi_hop_specific": reasoning,
-    "multi_hop_abstract": reasoning,
-    "factual": simple,
-    "conditional_constraint": conditional,
-    "comparative": multi_context,
-    "conditional_reasoning": conditional,
-    "cross_document": multi_context,
-    "unanswerable": simple,
-}
-
-# 默认的问题类型比例（与 ragas 默认一致）。
-DEFAULT_DISTRIBUTIONS = {
-    "simple": 0.5,
-    "reasoning": 0.25,
-    "multi_context": 0.25,
-}
-
-
-def _normalise_distributions(
-    distributions: t.Optional[t.Dict[str, float]],
-) -> t.Dict[t.Any, float]:
-    raw = dict(distributions or DEFAULT_DISTRIBUTIONS)
-    if not raw:
-        raw = dict(DEFAULT_DISTRIBUTIONS)
-
-    unknown = set(raw) - set(_EVOLUTION_BY_TYPE)
-    if unknown:
-        raise ValueError(f"不支持的问题类型：{sorted(unknown)}")
-
-    if any(float(v) < 0 for v in raw.values()):
-        raise ValueError("问题类型数量不能小于 0")
-
-    total = sum(float(v) for v in raw.values())
-    if total <= 0:
-        raise ValueError("问题类型比例之和必须大于 0")
-
-    # 多个业务类型可能对应同一个 evolution，需要先合并权重再归一化。
-    result: t.Dict[t.Any, float] = {}
-    for name, weight in raw.items():
-        if float(weight) == 0:
-            continue
-        evolution = _EVOLUTION_BY_TYPE[name]
-        result[evolution] = result.get(evolution, 0.0) + float(weight) / total
-    return result
-
-
-def _build_docstore(
-    llm: DeepSeekRagasLLM,
-    embeddings: CloudRagasEmbeddings,
-    run_config: RunConfig,
-):
-    # 按字符粒度切分整篇文档（中文按字符、英文按词/分隔符递归切分）。
-    # 更细的节点能支撑 ragas 的 multi_context / reasoning 等多节点演化。
+def _build_chunks(documents: t.List[t.Dict[str, str]]) -> t.List[Document]:
+    """切分文档并保留来源信息，供 Ragas 构建知识图谱。"""
     splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100)
-    extractor = KeyphraseExtractor(llm=llm)
-    return InMemoryDocumentStore(
-        splitter=splitter,
-        embeddings=embeddings,
-        extractor=extractor,
-        run_config=run_config,
-    )
+    chunks: t.List[Document] = []
+    for document in documents:
+        metadata = {
+            "filename": document.get("filename", ""),
+            "doc_id": document.get("doc_id", ""),
+        }
+        chunks.extend(
+            Document(page_content=text, metadata=dict(metadata))
+            for text in splitter.split_text(document["text"])
+            if text.strip()
+        )
+    return chunks
 
 
 def generate_testset(
@@ -138,85 +51,66 @@ def generate_testset(
     """根据整篇文档文本生成测试集。
 
     Args:
-        documents: ``[{"filename": str, "text": str}, ...]``，``text`` 为整篇文档文本。
+        documents: ``[{"filename": str, "text": str}, ...]``。
         test_size: 期望生成的问题数量。
-        distributions: 可选的问题类型比例，例如 ``{"simple": 0.5, "reasoning": 0.25,
-            "multi_context": 0.25}``；缺省使用默认比例。
+        distributions: 十种业务问题类型的数量或权重；当前只使用四个已支持类型。
     """
-    documents = [d for d in documents if d.get("text", "").strip()]
+    documents = [document for document in documents if document.get("text", "").strip()]
     if not documents:
         raise ValueError("没有可用的文档文本")
 
     test_size = max(1, int(test_size))
-    evolution_distributions = _normalise_distributions(distributions)
-
-    run_config = RunConfig(timeout=120, max_retries=5, max_wait=60, max_workers=4)
+    run_config = RunConfig(timeout=1200, max_retries=5, max_wait=60, max_workers=4)
     llm = DeepSeekRagasLLM(run_config=run_config)
     embeddings = CloudRagasEmbeddings(run_config=run_config)
-    docstore = _build_docstore(llm, embeddings, run_config)
-
-    ragas_docs = [
-        Document(
-            page_content=d["text"],
-            metadata={"filename": d.get("filename", ""), "doc_id": d.get("doc_id", "")},
-        )
-        for d in documents
-    ]
-    docstore.add_documents(ragas_docs)
-
-    # 生成的问题数不能超过可用的节点数，否则抽样会越界。
-    node_count = len(docstore.nodes)
-    if node_count == 0:
+    query_distribution = build_query_distribution(llm, distributions)
+    chunks = _build_chunks(documents)
+    if not chunks:
         raise ValueError("文档切分后没有可用节点，无法生成测试集")
-    test_size = min(test_size, node_count)
 
-    generator = TestsetGenerator(
-        generator_llm=llm,
-        critic_llm=llm,
-        embeddings=embeddings,
-        docstore=docstore,
-    )
-    testset = generator.generate(
-        test_size=test_size,
-        distributions=evolution_distributions,
-        is_async=False,
-        raise_exceptions=True,
+    generator = TestsetGenerator(llm=llm, embedding_model=embeddings)
+    testset = generator.generate_with_chunks(
+        chunks=chunks,
+        testset_size=test_size,
+        query_distribution=query_distribution,
         run_config=run_config,
+        raise_exceptions=True,
     )
 
-    df = testset.to_pandas()
     testset_rows = []
-    for _, row in df.iterrows():
-        answer = row.get("ground_truth", np.nan)
-        if answer is None or (isinstance(answer, float) and np.isnan(answer)):
-            answer = ""
-        testset_rows.append({
-            "question": str(row.get("question", "")).strip(),
-            "answer": str(answer).strip(),
-            "question_type": row.get("evolution_type", ""),
-            "question_type_label": QUESTION_TYPE_LABELS.get(row.get("evolution_type", ""), ""),
-            "contexts": list(row.get("contexts", []) or []),
-        })
+    for row in testset.to_list():
+        question_type = str(row.get("synthesizer_name", ""))
+        answer = row.get("reference")
+        testset_rows.append(
+            {
+                "question": str(row.get("user_input") or "").strip(),
+                "answer": str(answer or "").strip(),
+                "question_type": question_type,
+                "question_type_label": QUESTION_TYPE_LABELS.get(question_type, ""),
+                "contexts": list(row.get("reference_contexts") or []),
+            }
+        )
 
-    ratio = _compute_ratio(testset_rows)
     return {
         "total": len(testset_rows),
         "testset": testset_rows,
-        "question_type_ratio": ratio,
+        "question_type_ratio": _compute_ratio(testset_rows),
     }
 
 
-def _compute_ratio(testset_rows: t.List[t.Dict[str, t.Any]]) -> t.Dict[str, t.Dict[str, t.Any]]:
+def _compute_ratio(
+    testset_rows: t.List[t.Dict[str, t.Any]],
+) -> t.Dict[str, t.Dict[str, t.Any]]:
     counts: t.Dict[str, int] = {}
     for row in testset_rows:
         counts[row["question_type"]] = counts.get(row["question_type"], 0) + 1
 
     total = len(testset_rows) or 1
     return {
-        qtype: {
+        question_type: {
             "count": count,
             "ratio": round(count / total, 4),
-            "label": QUESTION_TYPE_LABELS.get(qtype, ""),
+            "label": QUESTION_TYPE_LABELS.get(question_type, ""),
         }
-        for qtype, count in sorted(counts.items(), key=lambda item: -item[1])
+        for question_type, count in sorted(counts.items(), key=lambda item: -item[1])
     }

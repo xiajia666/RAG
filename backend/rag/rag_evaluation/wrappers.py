@@ -1,7 +1,7 @@
-"""ragas 的 LLM / Embedding 适配器。
+"""Ragas 的 LLM / Embedding 适配器。
 
-ragas 0.1.12 的 TestsetGenerator 通过 ``BaseRagasLLM`` 与 ``BaseRagasEmbeddings``
-抽象接口调用模型。这里复用项目已有的 DeepSeek 问答客户端与云端 Embedding 客户端，
+新版 TestsetGenerator 通过 ``BaseRagasLLM`` 与 ``BaseRagasEmbeddings``
+调用模型。这里复用项目已有的 DeepSeek 问答客户端与云端 Embedding 客户端，
 避免引入 langchain-openai 在非 OpenAI 服务上的兼容问题（例如 OpenAI 兼容端点不接受
 token id 数组作为 embedding 输入）。
 """
@@ -22,7 +22,7 @@ class DeepSeekRagasLLM(BaseRagasLLM):
     """基于项目 DeepSeek 客户端的 ragas LLM 适配器。"""
 
     def __init__(self, run_config: t.Optional[RunConfig] = None) -> None:
-        self.run_config = run_config or RunConfig()
+        super().__init__(run_config=run_config or RunConfig())
 
     def _call(self, prompt_text: str, temperature: float, n: int) -> LLMResult:
         temperature = max(1e-8, temperature or 0.3)
@@ -60,12 +60,17 @@ class DeepSeekRagasLLM(BaseRagasLLM):
             None, self._call, prompt.to_string(), temperature or 0.3, n
         )
 
+    def is_finished(self, response: LLMResult) -> bool:
+        """项目客户端只返回完整文本；正常返回即表示生成结束。"""
+        return bool(response.generations)
+
 
 class CloudRagasEmbeddings(BaseRagasEmbeddings):
     """基于项目云端 Embedding 客户端的 ragas Embedding 适配器。"""
 
     def __init__(self, run_config: t.Optional[RunConfig] = None) -> None:
-        self.run_config = run_config or RunConfig()
+        super().__init__()
+        self.set_run_config(run_config or RunConfig())
 
     def embed_documents(self, texts: t.List[str]) -> t.List[t.List[float]]:
         if not texts:
