@@ -23,6 +23,8 @@ backend/data/sessions/
 # 前端
 frontend/node_modules/
 frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
 
 # DeepDoc 模型权重（体积较大，从外部拷贝/下载）
 backend/rag/parse_model/

@@ -213,6 +213,27 @@ npm run build          # 构建到 frontend/dist，由后端静态托管
 
 构建后直接访问 `http://localhost:8000` 即为完整应用（前端 + API 同源）。
 
+#### 本地前端连接线上后端
+
+前端请求统一使用 `/api` 相对路径。开发时建议由 Vite 代理到线上后端，这样浏览器看到的请求仍与本地前端同源，无需为本地开发单独配置 CORS。
+
+```bash
+cd frontend
+cp .env.example .env.development.local
+# 编辑 .env.development.local：
+# API_PROXY_TARGET=https://你的线上域名
+npm run dev
+```
+
+也可以只为本次启动临时指定：
+
+```bash
+cd frontend
+API_PROXY_TARGET=https://你的线上域名 npm run dev
+```
+
+`API_PROXY_TARGET` 只由本地 Vite 开发服务器读取，不会写入浏览器端构建产物。修改后需要重启 `npm run dev`。若线上后端使用自签名 HTTPS 证书，应优先为服务器配置受信任证书，不要在前端关闭 TLS 校验。
+
 ## 使用流程
 
 1. 打开应用 → 注册首个账号（自动成为**管理员**）。
