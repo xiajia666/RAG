@@ -46,13 +46,35 @@ QUESTION_TYPE_LABELS = {
     "reasoning": "多跳推理",
     "multi_context": "多上下文",
     "conditional": "条件问题",
+    "single_hop_specific": "单跳具体",
+    "single_hop_abstract": "单跳抽象",
+    "multi_hop_specific": "多跳具体",
+    "multi_hop_abstract": "多跳抽象",
+    "factual": "事实类",
+    "conditional_constraint": "条件约束型",
+    "comparative": "对比类",
+    "conditional_reasoning": "条件推理问题",
+    "cross_document": "跨文档关联类",
+    "unanswerable": "不可回答型",
 }
 
+# 新的业务问题类型会映射到最接近的 ragas evolution。
+# 保留旧 key，以兼容已上线的调用方。
 _EVOLUTION_BY_TYPE = {
     "simple": simple,
     "reasoning": reasoning,
     "multi_context": multi_context,
     "conditional": conditional,
+    "single_hop_specific": simple,
+    "single_hop_abstract": simple,
+    "multi_hop_specific": reasoning,
+    "multi_hop_abstract": reasoning,
+    "factual": simple,
+    "conditional_constraint": conditional,
+    "comparative": multi_context,
+    "conditional_reasoning": conditional,
+    "cross_document": multi_context,
+    "unanswerable": simple,
 }
 
 # 默认的问题类型比例（与 ragas 默认一致）。
@@ -74,10 +96,21 @@ def _normalise_distributions(
     if unknown:
         raise ValueError(f"不支持的问题类型：{sorted(unknown)}")
 
+    if any(float(v) < 0 for v in raw.values()):
+        raise ValueError("问题类型数量不能小于 0")
+
     total = sum(float(v) for v in raw.values())
     if total <= 0:
         raise ValueError("问题类型比例之和必须大于 0")
-    return {_EVOLUTION_BY_TYPE[name]: float(weight) / total for name, weight in raw.items()}
+
+    # 多个业务类型可能对应同一个 evolution，需要先合并权重再归一化。
+    result: t.Dict[t.Any, float] = {}
+    for name, weight in raw.items():
+        if float(weight) == 0:
+            continue
+        evolution = _EVOLUTION_BY_TYPE[name]
+        result[evolution] = result.get(evolution, 0.0) + float(weight) / total
+    return result
 
 
 def _build_docstore(
